@@ -1,0 +1,31 @@
+/*
+ * Copyright (c) 2025 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+/ {
+	/* Configure partition manager to use gd25wb256 as the external flash */
+	chosen {
+		nordic,pm-ext-flash = &gd25wb256;
+	};
+
+	aliases {
+		ext-flash = &gd25wb256;
+	};
+
+        uart_proxy_agent: uart-proxy {
+		compatible = "zephyr,zbus-proxy-agent-uart";
+		status = "okay";
+		uart-device = <&uart1>;
+	};
+};
+
+&gd25wb256 {
+	status = "okay";
+};
+
+&uart1 {
+	status = "okay";
+	current-speed = <1000000>;
+};

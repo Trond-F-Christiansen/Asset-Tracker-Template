@@ -30,3 +30,9 @@ add_subdirectory_ifdef(CONFIG_APP_LOCATION src/modules/location)
 add_subdirectory_ifdef(CONFIG_APP_CLOUD src/modules/cloud)
 add_subdirectory_ifdef(CONFIG_APP_FOTA src/modules/fota)
 add_subdirectory_ifdef(CONFIG_APP_STORAGE src/modules/storage)
+
+# multi-domain modules
+if(CONFIG_MDM)
+    add_subdirectory(../multi-domain-modules/modules ${CMAKE_BINARY_DIR}/multi-domain-modules)
+    include(cmake/multi_domain.cmake)
+endif()

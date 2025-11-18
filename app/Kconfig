@@ -17,7 +17,9 @@ rsource "src/modules/environmental/Kconfig.environmental"
 rsource "src/modules/button/Kconfig.button"
 rsource "src/modules/storage/Kconfig.storage"
 
-endmenu
+orsource "../multi-domain-modules/modules/Kconfig.modules"
+
+endmenu # Asset Tracker Template
 
 menu "Zephyr Kernel"
 source "Kconfig.zephyr"
