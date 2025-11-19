@@ -27,6 +27,9 @@
 #ifdef CONFIG_MDM_BLE_NUS
 #include "../../multi-domain-modules/modules/ble_nus/ble_nus.h"
 #endif
+#ifdef CONFIG_MDM_CHANNEL_SOUNDING
+#include "../../multi-domain-modules/modules/channel_sounding/channel_sounding.h"
+#endif
 
 /**
  * @brief List of data sources that can be stored by the storage module
@@ -79,7 +82,10 @@
 		      struct network_msg, network_check, network_extract)                       \
         IF_ENABLED(CONFIG_MDM_BLE_NUS,                                                          \
                    (X(BLE_NUS, BLE_NUS_CHAN, struct ble_nus_module_message,                     \
-                      struct ble_nus_module_message, ble_nus_check, ble_nus_extract)))
+                      struct ble_nus_module_message, ble_nus_check, ble_nus_extract)))          \
+        IF_ENABLED(CONFIG_MDM_CHANNEL_SOUNDING,                                                 \
+                   (X(CHANNEL_SOUNDING, CS_DISTANCE_CHAN, struct cs_distance_msg,               \
+                      struct cs_distance_msg, cs_distance_check, cs_distance_extract)))
 
 #define STORAGE_DATA_TYPE(_name)								\
 	STORAGE_TYPE_ ## _name

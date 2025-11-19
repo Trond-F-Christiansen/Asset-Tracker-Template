@@ -8,4 +8,5 @@
 if(CONFIG_MDM)
         target_compile_definitions(app PRIVATE "MDM_LED_PROXY_NODE=DT_NODELABEL(uart_proxy_agent)")
         target_compile_definitions(app PRIVATE "MDM_BLE_NUS_PROXY_NODE=DT_NODELABEL(uart_proxy_agent)")
+        target_compile_definitions(app PRIVATE "MDM_CHANNEL_SOUNDING_PROXY_NODE=DT_NODELABEL(uart_proxy_agent)")
 endif()

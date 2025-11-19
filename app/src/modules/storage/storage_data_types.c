@@ -27,6 +27,10 @@
 #include "../../multi-domain-modules/modules/ble_nus/ble_nus.h"
 #endif
 
+#ifdef CONFIG_MDM_CHANNEL_SOUNDING
+#include "../../multi-domain-modules/modules/channel_sounding/channel_sounding.h"
+#endif
+
 /**
  * @brief Register all enabled data types with the storage module
  *
@@ -123,5 +127,17 @@ void ble_nus_extract(const struct ble_nus_module_message *msg, struct ble_nus_mo
 {
         *data = *msg;
 }
-
 #endif /*CONFIG_MDM_BLE_NUS */
+
+#ifdef CONFIG_MDM_CHANNEL_SOUNDING
+
+bool cs_distance_check(const struct cs_distance_msg *msg)
+{
+        return msg->type == CS_DISTANCE_MEASUREMENT;
+}
+
+void cs_distance_extract(const struct cs_distance_msg *msg, struct cs_distance_msg *data)
+{
+        *data = *msg;
+}
+#endif /*CONFIG_MDM_CHANNEL_SOUNDING */
