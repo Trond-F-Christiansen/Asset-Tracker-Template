@@ -24,6 +24,10 @@
 #include "location.h"
 #endif
 
+#ifdef CONFIG_MDM_BLE_NUS
+#include "../../multi-domain-modules/modules/ble_nus/ble_nus.h"
+#endif
+
 /**
  * @brief List of data sources that can be stored by the storage module
  *
@@ -71,8 +75,11 @@
 	IF_ENABLED(CONFIG_APP_LOCATION,								\
 		   (X(LOCATION, LOCATION_CHAN, struct location_msg,				\
 		      struct location_msg, location_check, location_extract)))			\
-		   X(NETWORK, NETWORK_CHAN, struct network_msg,				\
-		      struct network_msg, network_check, network_extract)
+		   X(NETWORK, NETWORK_CHAN, struct network_msg,				        \
+		      struct network_msg, network_check, network_extract)                       \
+        IF_ENABLED(CONFIG_MDM_BLE_NUS,                                                          \
+                   (X(BLE_NUS, BLE_NUS_CHAN, struct ble_nus_module_message,                     \
+                      struct ble_nus_module_message, ble_nus_check, ble_nus_extract)))
 
 #define STORAGE_DATA_TYPE(_name)								\
 	STORAGE_TYPE_ ## _name

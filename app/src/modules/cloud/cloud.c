@@ -39,6 +39,7 @@ LOG_MODULE_REGISTER(cloud, CONFIG_APP_CLOUD_LOG_LEVEL);
 
 #define CUSTOM_JSON_APPID_VAL_CONEVAL "CONEVAL"
 #define CUSTOM_JSON_APPID_VAL_BATTERY "BATTERY"
+#define CUSTOM_JSON_APPID_VAL_BLE_NUS "BLE_NUS"
 
 #define AGNSS_MAX_DATA_SIZE 3800
 
@@ -434,6 +435,37 @@ static int send_storage_data_to_cloud(const struct storage_data_item *item)
 
 		return 0;
 	}
+
+#if defined(CONFIG_MDM_BLE_NUS)
+
+        if (item->type == STORAGE_TYPE_BLE_NUS) {
+                char message[100] = {0};
+
+                err = snprintf(message, sizeof(message),
+                               "%s", item->data.BLE_NUS.data);
+                if (err < 0 || err >= sizeof(message)) {
+                        LOG_ERR("Failed to create BLE message, error: %d", err);
+                        SEND_FATAL_ERROR();
+                }
+
+                err = nrf_cloud_coap_message_send(CUSTOM_JSON_APPID_VAL_BLE_NUS,
+                                                  message,
+                                                  false,
+                                                  timestamp_ms,
+                                                  confirmable);
+                if (err == -ENETUNREACH) {
+                        LOG_ERR("Failed to send BLE data to cloud, network unreachable");
+                        return err;
+                } else if (err) {
+                        LOG_ERR("Failed to send BLE data to cloud, error: %d", err);
+                        SEND_FATAL_ERROR();
+                        return err;
+                }
+
+                return 0;
+        }
+
+#endif /* CONFIG_MDM_BLE_NUS */
 
 	LOG_WRN("Unknown storage data type: %d", item->type);
 

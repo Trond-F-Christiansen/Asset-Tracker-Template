@@ -23,6 +23,10 @@
 #include "location.h"
 #endif
 
+#ifdef CONFIG_MDM_BLE_NUS
+#include "../../multi-domain-modules/modules/ble_nus/ble_nus.h"
+#endif
+
 /**
  * @brief Register all enabled data types with the storage module
  *
@@ -107,3 +111,17 @@ void network_extract(const struct network_msg *msg, struct network_msg *data)
 {
 	*data = *msg;
 }
+
+#ifdef CONFIG_MDM_BLE_NUS
+
+bool ble_nus_check(const struct ble_nus_module_message *msg)
+{
+        return msg->type == BLE_RECV;
+}
+
+void ble_nus_extract(const struct ble_nus_module_message *msg, struct ble_nus_module_message *data)
+{
+        *data = *msg;
+}
+
+#endif /*CONFIG_MDM_BLE_NUS */
