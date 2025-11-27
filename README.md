@@ -1,5 +1,7 @@
 # Asset Tracker Template
 
+trst
+
 **Oncommit**
 
 [![Target tests](https://github.com/nrfconnect/Asset-Tracker-Template/actions/workflows/build-and-target-test.yml/badge.svg)](https://github.com/nrfconnect/Asset-Tracker-Template/actions/workflows/build-and-target-test.yml)
