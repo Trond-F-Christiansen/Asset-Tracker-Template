@@ -1,0 +1,20 @@
+name: Test Fork Detection
+
+on:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Debug PR info
+        run: |
+          echo "Repository: ${{ github.repository }}"
+          echo "Head repo: ${{ github.event.pull_request.head.repo.full_name }}"
+          echo "Base repo: ${{ github.event.pull_request.base.repo.full_name }}"
+          echo "Is same repo: ${{ github.event.pull_request.head.repo.full_name == github.repository }}"
+          echo "Is fork: ${{ github.event.pull_request.head.repo.fork }}"
+
+      - name: Test condition
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        run: echo "This would run for same-repo PRs only"
