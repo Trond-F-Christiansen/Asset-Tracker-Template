@@ -45,20 +45,9 @@ BUILD_ASSERT(CONFIG_APP_STORAGE_WATCHDOG_TIMEOUT_SECONDS >
 
 /* Calculate the maximum message size from the list of channels */
 
-/* Create channel list from DATA_SOURCE_LIST.
- * This is used to calculate the maximum message size and to add observers.
- * The DATA_SOURCE_LIST macro is defined in `storage_data_types.h`.
- */
-
-/* Calculate maximum size needed for any message type */
-#define STORAGE_MSG_UNION_MEMBER(_name, _chan, _msg_type, ...) _msg_type _name##_msg_member;
-
-#define STORAGE_MAX_MSG_SIZE_FROM_LIST(_DATA_SOURCE_LIST_LIST) \
-	sizeof(union {_DATA_SOURCE_LIST_LIST(STORAGE_MSG_UNION_MEMBER)})
-
-/* Use the larger of: largest message type or storage_msg struct */
-#define MAX_MSG_SIZE	MAX(STORAGE_MAX_MSG_SIZE_FROM_LIST(DATA_SOURCE_LIST), \
-			    sizeof(struct storage_msg))
+/* Use the larger of: largest message type (element 3 in DATA_SOURCE_LIST) or storage_msg struct */
+#define MAX_MSG_SIZE MAX(MAX_TYPE_SIZE_FROM_LIST_ELEMENT(DATA_SOURCE_LIST, 3), \
+			 sizeof(struct storage_msg))
 
 /**
  * @brief Add storage_subscriber as an observer to a channel

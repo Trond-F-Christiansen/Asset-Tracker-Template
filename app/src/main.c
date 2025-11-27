@@ -89,7 +89,7 @@ ZBUS_CHAN_DEFINE(TIMER_CHAN,
 	X(TIMER_CHAN,		enum timer_msg_type)
 
 /* Calculate the maximum message size from the list of channels */
-#define MAX_MSG_SIZE				MAX_MSG_SIZE_FROM_LIST(CHANNEL_LIST)
+#define MAX_MSG_SIZE				MAX_TYPE_SIZE_FROM_LIST_ELEMENT(CHANNEL_LIST, 2)
 
 /* Add main_subscriber as observer to all the channels in the list. */
 #define ADD_OBSERVERS(_chan, _type)		ZBUS_CHAN_ADD_OBS(_chan, main_subscriber, 0);

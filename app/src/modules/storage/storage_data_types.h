@@ -83,14 +83,6 @@
 #define _STORAGE_DATA_TYPE_MEMBER(_name, _chan, _msg_type, _data_type, _check_fn, _extract_fn)	\
 	_data_type _name;
 
-
-/* Calculate the maximum data size from the list of channels */
-#define STORAGE_DATA_UNION_MEMBER(_name, _chan, _msg_type, _data_type, _check_fn, _extract_fn) \
-	_data_type _name##_member;
-
-#define STORAGE_MAX_DATA_SIZE_FROM_LIST(_DATA_SOURCE_LIST_LIST) \
-	sizeof(union { _DATA_SOURCE_LIST_LIST(STORAGE_DATA_UNION_MEMBER) })
-
 /**
  * @brief Maximum size in bytes of any data type that can be stored
  *
@@ -99,8 +91,8 @@
  * in the DATA_SOURCE_LIST macro and finding the largest one.
  *
  * The calculation works as follows:
- * 1. DATA_SOURCE_LIST is expanded with STORAGE_DATA_UNION_MEMBER to create union members
- *    for each enabled data type
+ * 1. DATA_SOURCE_LIST is expanded with a helper macro that creates a union member for each data
+ *   type (using the fourth argument of each entry in DATA_SOURCE_LIST, which is the data type)
  * 2. The compiler determines the maximum size needed for the union
  * 3. The result is the size of the largest data type that needs to be stored
  *
@@ -127,7 +119,7 @@
  * The value is automatically updated when new data types are added to DATA_SOURCE_LIST
  * or when existing data types change size, ensuring the storage system remains consistent.
  */
-#define STORAGE_MAX_DATA_SIZE	STORAGE_MAX_DATA_SIZE_FROM_LIST(DATA_SOURCE_LIST)
+#define STORAGE_MAX_DATA_SIZE MAX_TYPE_SIZE_FROM_LIST_ELEMENT(DATA_SOURCE_LIST, 4)
 
 /**
  * @brief Unique identifiers for each type of data that can be stored.

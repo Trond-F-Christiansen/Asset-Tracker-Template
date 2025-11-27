@@ -51,7 +51,7 @@ ZBUS_MSG_SUBSCRIBER_DEFINE(cloud_subscriber);
 		X(CLOUD_CHAN, struct cloud_msg)
 
 /* Calculate the maximum message size from the list of channels */
-#define MAX_MSG_SIZE			MAX_MSG_SIZE_FROM_LIST(CHANNEL_LIST)
+#define MAX_MSG_SIZE			MAX_TYPE_SIZE_FROM_LIST_ELEMENT(CHANNEL_LIST, 2)
 
 /* Add the cloud_subscriber as observer to all the channels in the list. */
 #define ADD_OBSERVERS(_chan, _type)	ZBUS_CHAN_ADD_OBS(_chan, cloud_subscriber, 0);
