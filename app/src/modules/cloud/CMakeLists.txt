@@ -17,3 +17,10 @@ if (CONFIG_NRF_CLOUD_COAP_SEC_TAG GREATER_EQUAL 2147483648 AND CONFIG_NRF_CLOUD_
 			"TLS traffic can now be decrypted with Nordic tools. "
 			"This should only be used during development and testing.")
 endif()
+
+# Application-side JWT generation. Wrap the public nRF Cloud entry point instead
+# of patching nrf_cloud_jwt.c; all callers are in other translation units.
+if(CONFIG_APP_CLOUD_JWT_TEST_KEY_BUILTIN)
+  target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/cloud_jwt.c)
+  zephyr_ld_options(-Wl,--wrap=nrf_cloud_jwt_generate)
+endif()
