@@ -16,6 +16,7 @@
 
 LOG_MODULE_DECLARE(cloud, CONFIG_APP_CLOUD_LOG_LEVEL);
 
+#if defined(CONFIG_NRF_PROVISIONING)
 static void nrf_provisioning_callback(const struct nrf_provisioning_callback_data *event)
 {
 	int err;
@@ -156,3 +157,16 @@ int cloud_provisioning_trigger(void)
 
 	return 0;
 }
+#else
+int cloud_provisioning_init(void)
+{
+	return 0;
+}
+
+int cloud_provisioning_trigger(void)
+{
+	LOG_WRN("Cloud provisioning is disabled for this target");
+
+	return -ENOTSUP;
+}
+#endif
