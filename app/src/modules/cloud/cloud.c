@@ -938,7 +938,12 @@ static enum smf_state_result state_connecting_provisioned_run(void *obj)
 			(const struct priv_cloud_msg *)state_object->msg_buf;
 
 		if (msg->type == CLOUD_NOT_AUTHENTICATED) {
+#if defined(CONFIG_NRF_PROVISIONING)
 			smf_set_state(SMF_CTX(state_object), &states[STATE_PROVISIONING]);
+#else
+			LOG_WRN("Cloud provisioning is disabled; retrying with backoff");
+			smf_set_state(SMF_CTX(state_object), &states[STATE_CONNECTING_BACKOFF]);
+#endif
 
 			return SMF_EVENT_HANDLED;
 		} else if (msg->type == CLOUD_CONNECTION_SUCCESS) {
@@ -981,7 +986,14 @@ static void state_connecting_provisioning_entry(void *obj)
 	err = cloud_provisioning_trigger();
 	if (err) {
 		LOG_ERR("nrf_provisioning_trigger_manually, error: %d", err);
-		SEND_FATAL_ERROR();
+
+		state_object->provisioning_ongoing = false;
+
+		if (state_object->network_connected) {
+			smf_set_state(SMF_CTX(state_object), &states[STATE_CONNECTING_BACKOFF]);
+		} else {
+			smf_set_state(SMF_CTX(state_object), &states[STATE_DISCONNECTED]);
+		}
 
 		return;
 	}
