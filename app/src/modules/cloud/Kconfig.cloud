@@ -140,6 +140,25 @@ config APP_CLOUD_MSG_PROCESSING_TIMEOUT_SECONDS
 	  Maximum time allowed for processing a single message in the module's state machine.
 	  The value must be smaller than CONFIG_APP_CLOUD_WATCHDOG_TIMEOUT_SECONDS.
 
+config APP_CLOUD_JWT_TEST_KEY_BUILTIN
+	bool "Use built-in test key for custom JWT"
+	depends on NRF_CLOUD_JWT_SOURCE_CUSTOM
+	help
+	  Test-only option for bring-up. When enabled, nrf_cloud_jwt uses a private key
+	  compiled into firmware instead of reading it from modem credentials.
+
+config APP_CLOUD_JWT_TEST_KEY_HEX
+	string "Built-in test key scalar (hex, 32 bytes)"
+	depends on APP_CLOUD_JWT_TEST_KEY_BUILTIN
+	help
+	  64 hex characters representing the P-256 private key scalar.
+	  This key must match the public key/certificate registered on nRF Cloud.
+
+	  This is secret key material. Never commit a real value: set it in a
+	  local, untracked configuration fragment or on the west build command
+	  line. A key that has been pushed must be considered compromised, and
+	  the device credentials must be regenerated and re-onboarded.
+
 config APP_CLOUD_STORAGE_BATCH_ITEM_READ_TIMEOUT_MS
 	int "Storage batch item read timeout (ms)"
 	range 1 1000
