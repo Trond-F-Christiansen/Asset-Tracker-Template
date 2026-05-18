@@ -129,6 +129,16 @@ config APP_STORAGE_SHELL_STATS
 	  This includes information about stored records, types, and memory usage.
 	  Enabling this option will increase the code size of the storage module.
 
+config APP_STORAGE_SHELL_DUMP
+	bool "Enable storage full dump shell command"
+	depends on APP_STORAGE_SHELL && APP_STORAGE_BACKEND_LITTLEFS
+	default y if APP_STORAGE_SHELL && APP_STORAGE_BACKEND_LITTLEFS
+	help
+	  Enable the 'att_storage dump' shell command which prints all stored records
+	  for every data type directly from the LittleFS backend, including records
+	  that have already been sent. Each record is annotated as 'sent' or 'pending'
+	  and printed as a hex dump.
+
 module = APP_STORAGE
 module-str = Storage
 source "subsys/logging/Kconfig.template.log_config"
