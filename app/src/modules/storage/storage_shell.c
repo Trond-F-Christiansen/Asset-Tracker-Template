@@ -13,6 +13,10 @@
 #include "storage.h"
 #include "storage_data_types.h" /* For storage_chan */
 
+#if IS_ENABLED(CONFIG_APP_STORAGE_SHELL_DUMP)
+#include "backends/littlefs_backend.h"
+#endif
+
 LOG_MODULE_REGISTER(storage_shell, CONFIG_APP_STORAGE_LOG_LEVEL);
 
 static int cmd_storage_flush(const struct shell *sh, size_t argc, char **argv)
@@ -111,12 +115,27 @@ static int cmd_storage_stats(const struct shell *sh, size_t argc, char **argv)
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_APP_STORAGE_SHELL_DUMP)
+static int cmd_storage_dump(const struct shell *sh, size_t argc, char **argv)
+{
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+
+	return lfs_storage_dump_all(sh);
+}
+#endif /* CONFIG_APP_STORAGE_SHELL_DUMP */
+
 SHELL_STATIC_SUBCMD_SET_CREATE(sub_cmds,
 	SHELL_CMD(flush, NULL, "Flush stored data", cmd_storage_flush),
 	SHELL_CMD(batch_request, NULL, "Request data from batch", cmd_storage_batch_request),
 	SHELL_CMD(clear, NULL, "Clear all stored data", cmd_storage_clear),
 	SHELL_CMD(batch_close, NULL, "Close batch session", cmd_storage_batch_close),
 	SHELL_CMD(stats, NULL, "Show storage statistics", cmd_storage_stats),
+#if IS_ENABLED(CONFIG_APP_STORAGE_SHELL_DUMP)
+	SHELL_CMD(dump, NULL,
+		  "Dump all records (including already-sent) from LittleFS backend",
+		  cmd_storage_dump),
+#endif
 	SHELL_SUBCMD_SET_END
 );
 

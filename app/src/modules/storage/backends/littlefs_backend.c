@@ -17,6 +17,10 @@
 #include "storage_backend.h"
 #include "storage_data_types.h"
 
+#ifdef CONFIG_APP_STORAGE_SHELL_DUMP
+#include "littlefs_backend.h"
+#endif
+
 #define MAX_PATH_LEN     CONFIG_APP_STORAGE_LITTLEFS_MAX_PATH_LEN
 #define RECORDS_PER_TYPE CONFIG_APP_STORAGE_MAX_RECORDS_PER_TYPE
 
@@ -885,6 +889,202 @@ static int lfs_storage_clear(void)
 
 	return 0;
 }
+#ifdef CONFIG_APP_STORAGE_SHELL_DUMP
+
+/* Maximum hex characters printed per dump line (3 chars per byte: "xx "). */
+#define DUMP_BYTES_PER_LINE 64
+
+/*
+ * @brief Dump all records from a single already-open LittleFS data file.
+ *
+ * Reads every record in [abs_start, abs_end) by seeking within the
+ * already-open @p file handle rather than calling fs_open/fs_close per record.
+ * On LittleFS, fs_open walks the directory tree and verifies the file's
+ * metadata block from flash; for types where many records share one file
+ * (entries_per_block > 1) this avoids that overhead for every record.
+ *
+ * @param sh                Shell instance.
+ * @param type              Storage data type being dumped.
+ * @param file              Open, readable LittleFS file handle.
+ * @param abs_start         First absolute ring-buffer index to read.
+ * @param abs_end           One past the last absolute index to read.
+ * @param read_offset       Header read_offset: indices below this are 'sent'.
+ * @param entries_per_block Records that fit in one filesystem block.
+ */
+static void dump_file_records(const struct shell *sh,
+			      const struct storage_data *type,
+			      struct fs_file_t *file,
+			      uint32_t abs_start,
+			      uint32_t abs_end,
+			      uint32_t read_offset,
+			      size_t entries_per_block)
+{
+	uint8_t data_buf[STORAGE_MAX_DATA_SIZE];
+	char hex_buf[DUMP_BYTES_PER_LINE * 3 + 1];
+
+	for (uint32_t abs_idx = abs_start; abs_idx < abs_end; abs_idx++) {
+		uint32_t wrapped = abs_idx % RECORDS_PER_TYPE;
+		int eo = get_entry_offset_index(entries_per_block, wrapped);
+		off_t read_pos = (off_t)((size_t)eo * type->data_size);
+		const char *status = (abs_idx < read_offset) ? "sent   " : "pending";
+		int read_bytes;
+		int ret;
+
+		ret = fs_seek(file, read_pos, FS_SEEK_SET);
+		if (ret < 0) {
+			shell_error(sh, "  [%u] failed to seek: %d", abs_idx, ret);
+			continue;
+		}
+
+		read_bytes = fs_read(file, data_buf, type->data_size);
+		if (read_bytes < 0) {
+			shell_error(sh, "  [%u] failed to read: %d", abs_idx, read_bytes);
+			continue;
+		}
+
+		shell_print(sh, "  [%u] status=%s | %d bytes:", abs_idx, status, read_bytes);
+
+		for (int offset = 0; offset < read_bytes; offset += DUMP_BYTES_PER_LINE) {
+			int row_len = MIN(read_bytes - offset, DUMP_BYTES_PER_LINE);
+			int pos = 0;
+
+			for (int b = 0; b < row_len; b++) {
+				pos += snprintk(&hex_buf[pos], sizeof(hex_buf) - pos,
+						"%02x ", data_buf[offset + b]);
+			}
+			shell_print(sh, "    %04x: %s", offset, hex_buf);
+		}
+
+		/* Yield between records so the USB CDC-ACM TX buffer can drain. */
+		k_sleep(K_MSEC(1));
+	}
+}
+
+/*
+ * @brief Hex-dump all records for every registered data type directly from LittleFS.
+ *
+ * Reads every record slot — including records that have already been sent — by
+ * iterating the ring buffer from the oldest valid absolute index to write_offset-1.
+ * Each record is annotated as 'sent' or 'pending'.
+ *
+ * Each physical data file is opened once and all its records are read via
+ * sequential seeks (dump_file_records), avoiding repeated fs_open/fs_close
+ * overhead on LittleFS.
+ *
+ * @param sh Shell instance to print to.
+ * @return 0 on success, negative errno on first hard failure.
+ */
+int lfs_storage_dump_all(const struct shell *sh)
+{
+	/* Temporarily raise this thread to cooperative priority (-1) so the
+	 * scheduler never preempts it while the dump is running.
+	 * The original priority is restored unconditionally before returning.
+	 */
+	const int orig_prio = k_thread_priority_get(k_current_get());
+
+	k_thread_priority_set(k_current_get(), -1);
+
+	shell_print(sh, "=== Storage Dump ===");
+
+	STRUCT_SECTION_FOREACH(storage_data, type) {
+		struct storage_file_header header;
+		size_t entries_per_block;
+		uint32_t oldest_absolute;
+		uint32_t total_to_dump;
+		uint32_t pending_count;
+		int ret;
+
+		ret = read_storage_file_header(type, &header);
+		if (ret < 0) {
+			shell_error(sh, "Failed to read header for %s: %d", type->name, ret);
+			continue;
+		}
+
+		ret = get_entries_per_block(type, &entries_per_block);
+		if (ret < 0) {
+			shell_error(sh, "Failed to get entries per block for %s: %d",
+				    type->name, ret);
+			continue;
+		}
+
+		pending_count = header.write_offset - header.read_offset;
+		oldest_absolute = (header.write_offset >= RECORDS_PER_TYPE)
+				  ? header.write_offset - RECORDS_PER_TYPE
+				  : 0;
+		total_to_dump = header.write_offset - oldest_absolute;
+
+		shell_print(sh,
+			    "Type: %-16s total=%-4u pending=%-4u "
+			    "read_offset=%-8u write_offset=%u",
+			    type->name, total_to_dump, pending_count,
+			    header.read_offset, header.write_offset);
+
+		if (total_to_dump == 0) {
+			shell_print(sh, "  (empty)");
+			continue;
+		}
+
+		/* Walk the ring buffer opening each physical data file once.
+		 *
+		 * file_abs_end is the nearer of two boundaries:
+		 *   1. File boundary: entries_per_block records fit per file, so
+		 *      after (entries_per_block - eo) records the wrapped index
+		 *      enters the next file.
+		 *   2. Ring-wrap boundary: when wrapped reaches RECORDS_PER_TYPE
+		 *      it resets to 0, and file indexing also restarts.
+		 * file_abs_end is then clamped to write_offset.
+		 */
+		for (uint32_t abs_idx = oldest_absolute;
+		     abs_idx < header.write_offset; ) {
+			char file_path[MAX_PATH_LEN];
+			struct fs_file_t file;
+			uint32_t wrapped = abs_idx % RECORDS_PER_TYPE;
+			int fi = get_file_index(entries_per_block, wrapped);
+			uint32_t eo = (uint32_t)get_entry_offset_index(
+				entries_per_block, wrapped);
+			uint32_t records_to_file_end = (uint32_t)entries_per_block - eo;
+			uint32_t records_to_wrap = RECORDS_PER_TYPE - wrapped;
+			uint32_t file_abs_end = abs_idx
+						+ MIN(records_to_file_end,
+						      records_to_wrap);
+
+			file_abs_end = MIN(file_abs_end, header.write_offset);
+
+			ret = create_storage_file_path(type, fi, file_path);
+			if (ret < 0) {
+				shell_error(sh, "  [%u] failed to build path: %d",
+					    abs_idx, ret);
+				abs_idx = file_abs_end;
+				continue;
+			}
+
+			fs_file_t_init(&file);
+			ret = fs_open(&file, file_path, FS_O_READ);
+			if (ret < 0) {
+				shell_error(sh, "  [%u] failed to open %s: %d",
+					    abs_idx, file_path, ret);
+				abs_idx = file_abs_end;
+				continue;
+			}
+
+			dump_file_records(sh, type, &file,
+					  abs_idx, file_abs_end,
+					  header.read_offset,
+					  entries_per_block);
+
+			fs_close(&file);
+			abs_idx = file_abs_end;
+		}
+	}
+
+	shell_print(sh, "===================");
+
+	k_thread_priority_set(k_current_get(), orig_prio);
+
+	return 0;
+}
+#endif /* CONFIG_APP_STORAGE_SHELL_DUMP */
+
 /*
  * @brief LittleFS storage backend interface
  *
