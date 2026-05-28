@@ -525,6 +525,27 @@ static int request_storage_batch_data(uint32_t session_id)
 	return 0;
 }
 
+static bool handle_send_error(int err, const struct storage_data_item *item)
+{
+	/* Non-network errors (ENOTSUP, EINVAL, ENODATA) indicate malformed or
+	 * unsupported data that will never succeed.
+	 */
+	if (err == -ENOTSUP || err == -EINVAL || err == -ENODATA) {
+		LOG_ERR("Data error sending storage data (type %d), "
+			"dropping item: %d",
+			item->type, err);
+
+		return false;
+	}
+
+	/* Network/transport error */
+	LOG_ERR("Network error sending storage data (type %d), "
+		"aborting session: %d",
+		item->type, err);
+
+	return true;
+}
+
 static void handle_storage_batch_available(const struct storage_msg *msg)
 {
 	int err;
@@ -536,9 +557,21 @@ static void handle_storage_batch_available(const struct storage_msg *msg)
 		.type = STORAGE_BATCH_CLOSE,
 		.session_id = session_id,
 	};
+	struct storage_msg consume_msg = {
+		.type = STORAGE_BATCH_CONSUME,
+		.session_id = session_id,
+	};
 	bool session_error = false;
 
 	LOG_INF("Processing storage batch: %u items available", items_available);
+
+	/* Suppress delivery of storage_chan messages back to cloud_subscriber while we
+	 * are blocking in this loop.
+	 */
+	err = zbus_obs_set_chan_notification_mask(&cloud_subscriber, &storage_chan, true);
+	if (err) {
+		LOG_WRN("Failed to mask storage_chan for cloud_subscriber, error: %d", err);
+	}
 
 	/* Drain the batch buffer: read until timeout, abort on hard error */
 	while (!session_error) {
@@ -557,13 +590,33 @@ static void handle_storage_batch_available(const struct storage_msg *msg)
 
 		err = send_storage_data_to_cloud(&item);
 		if (err) {
-			LOG_ERR("Failed to send storage data to cloud, error: %d", err);
+			session_error = handle_send_error(err, &item);
+			if (session_error) {
+				/* Network error, abort */
+				continue;
+			}
+			/* For data errors, fall through to consume the item and prevent retrying
+			 * it in the next session.
+			 */
+		} else {
+			items_processed++;
 		}
 
-		items_processed++;
+		/* Consume the item: confirms a successful send or skips a malformed item */
+		consume_msg.data_type = item.type;
+		err = zbus_chan_pub(&storage_chan, &consume_msg, PUB_TIMEOUT);
+		if (err) {
+			LOG_ERR("Failed to consume storage item, error: %d", err);
+		}
 	}
 
 	LOG_DBG("Processed %u/%u storage items", items_processed, items_available);
+
+	/* Re-enable storage_chan notifications to cloud_subscriber */
+	err = zbus_obs_set_chan_notification_mask(&cloud_subscriber, &storage_chan, false);
+	if (err) {
+		LOG_WRN("Failed to unmask storage_chan for cloud_subscriber, error: %d", err);
+	}
 
 	if (!session_error && msg->more_data) {
 		LOG_DBG("More data available in batch, requesting next batch");

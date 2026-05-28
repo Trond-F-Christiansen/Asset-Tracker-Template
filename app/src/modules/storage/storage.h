@@ -82,6 +82,13 @@ enum storage_msg_type {
 
 	/* Batch is busy - cannot process request at this time. */
 	STORAGE_BATCH_BUSY,
+
+	/* Confirm that a batch item was successfully sent to cloud.
+	 * Must contain `data_type` identifying the type of the item just sent.
+	 * Storage removes the item from the backend queue head and makes the next
+	 * item available in the pipe. Only valid during an active batch session.
+	 */
+	STORAGE_BATCH_CONSUME,
 };
 
 /**
