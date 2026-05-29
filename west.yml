@@ -9,10 +9,12 @@ manifest:
   remotes:
     - name: ncs
       url-base: https://github.com/nrfconnect
+    - name: ncs-fork
+      url-base: https://github.com/Trond-F-Christiansen/
 
   projects:
     - name: nrf
-      remote: ncs
+      remote: ncs-fork
       repo-path: sdk-nrf
-      revision: v3.3.0
+      revision: japan-test
       import: true
