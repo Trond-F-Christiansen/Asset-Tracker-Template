@@ -15,6 +15,7 @@ zephyr_include_directories(memfault/config)
 
 # Add main application source
 target_sources(app PRIVATE src/main.c)
+target_sources(app PRIVATE src/common/app_config_settings.c)
 
 # Module source folders
 add_subdirectory(src/modules/network)

@@ -19,6 +19,7 @@
 #include "location.h"
 #include "storage.h"
 #include "cbor_helper.h"
+#include "app_config_settings.h"
 
 #if defined(CONFIG_APP_BUTTON)
 #include "button.h"
@@ -671,9 +672,18 @@ static void config_apply(struct main_state *state_object, const struct config_pa
 
 	if (config->sample_interval &&
 	    config->sample_interval != state_object->sample_interval_sec) {
+		struct config_params persist = {
+			.sample_interval = config->sample_interval,
+		};
+
 		LOG_DBG("Updating sample interval to %d seconds", config->sample_interval);
 		state_object->sample_interval_sec = config->sample_interval;
 		interval_changed = true;
+
+		err = app_config_settings_save(&persist);
+		if (err) {
+			LOG_WRN("Persisting sample_interval failed: %d", err);
+		}
 	}
 
 	if (config->storage_threshold_valid &&
@@ -681,6 +691,10 @@ static void config_apply(struct main_state *state_object, const struct config_pa
 		struct storage_msg storage_msg = {
 			.type = STORAGE_SET_THRESHOLD,
 			.data_len = config->storage_threshold,
+		};
+		struct config_params persist = {
+			.storage_threshold = config->storage_threshold,
+			.storage_threshold_valid = true,
 		};
 
 		LOG_DBG("Updating storage threshold to %d samples", config->storage_threshold);
@@ -692,6 +706,11 @@ static void config_apply(struct main_state *state_object, const struct config_pa
 			SEND_FATAL_ERROR();
 
 			return;
+		}
+
+		err = app_config_settings_save(&persist);
+		if (err) {
+			LOG_WRN("Persisting storage_threshold failed: %d", err);
 		}
 	}
 

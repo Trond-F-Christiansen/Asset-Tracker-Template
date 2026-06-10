@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
+#ifndef CBOR_HELPER_H_
+#define CBOR_HELPER_H_
+
 #include <zephyr/types.h>
 
 #define CLOUD_COMMAND_TYPE_PROVISION 1
@@ -60,3 +63,5 @@ int encode_shadow_parameters_to_cbor(const struct config_params *config,
 				     uint8_t *buffer,
 				     size_t buffer_size,
 				     size_t *encoded_len);
+
+#endif /* CBOR_HELPER_H_ */
