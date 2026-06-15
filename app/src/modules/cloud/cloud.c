@@ -825,12 +825,27 @@ static enum smf_state_result state_disconnected_run(void *obj)
 {
 	struct cloud_state_object *state_object = obj;
 
-	if (state_object->chan == &network_chan) {
-		const struct network_msg *msg = (const struct network_msg *)state_object->msg_buf;
+	/* Cloud auto-connect on NETWORK_CONNECTED has been disabled. The cloud module now
+	 * stays disconnected until an explicit CLOUD_CONNECT request is received.
+	 */
+	if (state_object->chan == &cloud_chan) {
+		const struct cloud_msg *msg = (const struct cloud_msg *)state_object->msg_buf;
 
-		if (msg->type == NETWORK_CONNECTED) {
+		if (msg->type == CLOUD_CONNECT) {
+			if (!state_object->network_connected) {
+				LOG_WRN("CLOUD_CONNECT received but network not connected, "
+					"ignoring");
+
+				return SMF_EVENT_HANDLED;
+			}
+
 			smf_set_state(SMF_CTX(state_object), &states[STATE_CONNECTING]);
 
+			return SMF_EVENT_HANDLED;
+		}
+
+		if (msg->type == CLOUD_DISCONNECT) {
+			/* Already disconnected; nothing to do. */
 			return SMF_EVENT_HANDLED;
 		}
 	}
@@ -869,6 +884,16 @@ static enum smf_state_result state_connecting_run(void *obj)
 		const struct network_msg *msg = (const struct network_msg *)state_object->msg_buf;
 
 		if (msg->type == NETWORK_DISCONNECTED) {
+			smf_set_state(SMF_CTX(state_object), &states[STATE_DISCONNECTED]);
+
+			return SMF_EVENT_HANDLED;
+		}
+	}
+
+	if (state_object->chan == &cloud_chan) {
+		const struct cloud_msg *msg = (const struct cloud_msg *)state_object->msg_buf;
+
+		if (msg->type == CLOUD_DISCONNECT) {
 			smf_set_state(SMF_CTX(state_object), &states[STATE_DISCONNECTED]);
 
 			return SMF_EVENT_HANDLED;
@@ -1161,6 +1186,14 @@ static enum smf_state_result state_connected_ready_run(void *obj)
 	}
 
 	if (state_object->chan == &cloud_chan) {
+		const struct cloud_msg *msg = (const struct cloud_msg *)state_object->msg_buf;
+
+		if (msg->type == CLOUD_DISCONNECT) {
+			smf_set_state(SMF_CTX(state_object), &states[STATE_DISCONNECTED]);
+
+			return SMF_EVENT_HANDLED;
+		}
+
 		handle_cloud_channel_message(state_object);
 
 		return SMF_EVENT_HANDLED;
@@ -1214,6 +1247,16 @@ static enum smf_state_result state_connected_paused_run(void *obj)
 
 		if (msg->type == NETWORK_CONNECTED) {
 			smf_set_state(SMF_CTX(state_object), &states[STATE_CONNECTED_READY]);
+
+			return SMF_EVENT_HANDLED;
+		}
+	}
+
+	if (state_object->chan == &cloud_chan) {
+		const struct cloud_msg *msg = (const struct cloud_msg *)state_object->msg_buf;
+
+		if (msg->type == CLOUD_DISCONNECT) {
+			smf_set_state(SMF_CTX(state_object), &states[STATE_DISCONNECTED]);
 
 			return SMF_EVENT_HANDLED;
 		}

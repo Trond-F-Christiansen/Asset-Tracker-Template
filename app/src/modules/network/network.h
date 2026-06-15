@@ -112,6 +112,29 @@ enum network_msg_type {
 	 * NETWORK_SYSTEM_MODE_RESPONSE message.
 	 */
 	NETWORK_SYSTEM_MODE_REQUEST,
+
+	/* Request to enter LTE receive-only mode (CFUN=2).
+	 *
+	 * In this mode the modem performs cell search/selection and lets the application call
+	 * lte_lc_neighbor_cell_measurement() / lte_lc_conn_eval_params_get() / lte_lc_env_eval(),
+	 * but does NOT register on the network. After the modem has completed cell search the
+	 * network module emits NETWORK_SEARCH_DONE; the application should wait for that event
+	 * before initiating an NCELLMEAS request.
+	 *
+	 * Receive-only mode draws considerably more current than CFUN=4. The application is
+	 * expected to leave receive-only mode (NETWORK_RX_ONLY_STOP) as soon as the scan has
+	 * completed.
+	 *
+	 * Only valid in disconnected/idle.
+	 *
+	 * Requires modem firmware mfw_nrf91x1 v2.0.3 or later.
+	 */
+	NETWORK_RX_ONLY_START,
+
+	/* Request to leave LTE receive-only mode and return the modem to flight mode (CFUN=4).
+	 * Only valid while in receive-only mode.
+	 */
+	NETWORK_RX_ONLY_STOP,
 };
 
 struct network_msg {

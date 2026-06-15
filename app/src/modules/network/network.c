@@ -54,6 +54,10 @@ enum network_module_state {
 			STATE_DISCONNECTED_IDLE,
 			/* The device is disconnected and the modem is searching for networks */
 			STATE_DISCONNECTED_SEARCHING,
+			/* The modem is in receive-only mode (CFUN=2). Cell search runs but no
+			 * network registration is attempted.
+			 */
+			STATE_DISCONNECTED_RX_ONLY,
 		/* The device is connected to a network */
 		STATE_CONNECTED,
 
@@ -85,6 +89,9 @@ static enum smf_state_result state_disconnected_run(void *obj);
 static enum smf_state_result state_disconnected_idle_run(void *obj);
 static void state_disconnected_searching_entry(void *obj);
 static enum smf_state_result state_disconnected_searching_run(void *obj);
+static void state_disconnected_rx_only_entry(void *obj);
+static enum smf_state_result state_disconnected_rx_only_run(void *obj);
+static void state_disconnected_rx_only_exit(void *obj);
 static void state_disconnecting_entry(void *obj);
 static enum smf_state_result state_disconnecting_run(void *obj);
 static enum smf_state_result state_connected_run(void *obj);
@@ -114,6 +121,12 @@ static const struct smf_state states[] = {
 	[STATE_DISCONNECTED_SEARCHING] =
 		SMF_CREATE_STATE(state_disconnected_searching_entry,
 				 state_disconnected_searching_run, NULL,
+				 &states[STATE_DISCONNECTED],
+				 NULL), /* No initial transition */
+	[STATE_DISCONNECTED_RX_ONLY] =
+		SMF_CREATE_STATE(state_disconnected_rx_only_entry,
+				 state_disconnected_rx_only_run,
+				 state_disconnected_rx_only_exit,
 				 &states[STATE_DISCONNECTED],
 				 NULL), /* No initial transition */
 	[STATE_CONNECTED] =
@@ -426,6 +439,14 @@ static enum smf_state_result state_disconnected_idle_run(void *obj)
 			smf_set_state(SMF_CTX(state_object), &states[STATE_DISCONNECTED_SEARCHING]);
 
 			return SMF_EVENT_HANDLED;
+		case NETWORK_RX_ONLY_START:
+			smf_set_state(SMF_CTX(state_object), &states[STATE_DISCONNECTED_RX_ONLY]);
+
+			return SMF_EVENT_HANDLED;
+		case NETWORK_RX_ONLY_STOP:
+			LOG_DBG("NETWORK_RX_ONLY_STOP received in idle, ignoring");
+
+			return SMF_EVENT_HANDLED;
 		case NETWORK_SYSTEM_MODE_SET_LTEM:
 			err = lte_lc_system_mode_set(LTE_LC_SYSTEM_MODE_LTEM_GPS,
 						     LTE_LC_SYSTEM_MODE_PREFER_AUTO);
@@ -459,6 +480,79 @@ static enum smf_state_result state_disconnected_idle_run(void *obj)
 	}
 
 	return SMF_EVENT_PROPAGATE;
+}
+
+static void state_disconnected_rx_only_entry(void *obj)
+{
+	int err;
+
+	ARG_UNUSED(obj);
+
+	LOG_DBG("state_disconnected_rx_only_entry");
+
+	/* Receive-only mode is supported on mfw_nrf91x1 v2.0.3 or later. The modem will run
+	 * cell selection and emit LTE_LC_MODEM_EVT_SEARCH_DONE when ready. NCELLMEAS, CONEVAL
+	 * and ENVEVAL can be used after that, but the modem will not register on the network.
+	 */
+	err = lte_lc_func_mode_set(LTE_LC_FUNC_MODE_RX_ONLY);
+	if (err) {
+		LOG_ERR("lte_lc_func_mode_set(RX_ONLY), error: %d", err);
+		SEND_FATAL_ERROR();
+	}
+}
+
+static enum smf_state_result state_disconnected_rx_only_run(void *obj)
+{
+	struct network_state_object const *state_object = obj;
+
+	if (&network_chan == state_object->chan) {
+		const struct network_msg *msg = (const struct network_msg *)state_object->msg_buf;
+
+		switch (msg->type) {
+		case NETWORK_RX_ONLY_STOP:
+			smf_set_state(SMF_CTX(state_object), &states[STATE_DISCONNECTED_IDLE]);
+
+			return SMF_EVENT_HANDLED;
+		case NETWORK_CONNECT:
+			/* Upgrade from receive-only to full registration. The exit handler will
+			 * leave RX_ONLY by switching to OFFLINE first; the searching state's
+			 * entry handler then drives the modem back to NORMAL.
+			 */
+			smf_set_state(SMF_CTX(state_object), &states[STATE_DISCONNECTED_SEARCHING]);
+
+			return SMF_EVENT_HANDLED;
+		case NETWORK_DISCONNECT:
+			smf_set_state(SMF_CTX(state_object), &states[STATE_DISCONNECTED_IDLE]);
+
+			return SMF_EVENT_HANDLED;
+		case NETWORK_RX_ONLY_START:
+			LOG_DBG("NETWORK_RX_ONLY_START received in rx_only, ignoring");
+
+			return SMF_EVENT_HANDLED;
+		default:
+			break;
+		}
+	}
+
+	return SMF_EVENT_PROPAGATE;
+}
+
+static void state_disconnected_rx_only_exit(void *obj)
+{
+	int err;
+
+	ARG_UNUSED(obj);
+
+	LOG_DBG("state_disconnected_rx_only_exit");
+
+	/* Drop the modem to cfun=4 mode on exit. If the next state is searching, its entry
+	 * handler will bring the modem back up to NORMAL via lte_lc_connect_async().
+	 */
+	err = lte_lc_offline();
+	if (err) {
+		LOG_ERR("lte_lc_offline (rx_only exit), error: %d", err);
+		SEND_FATAL_ERROR();
+	}
 }
 
 static void state_connected_entry(void *obj)

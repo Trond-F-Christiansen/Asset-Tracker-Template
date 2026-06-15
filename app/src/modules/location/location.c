@@ -19,6 +19,7 @@
 #include "modem/lte_lc.h"
 #include "location.h"
 #include "location_helper.h"
+#include "network.h"
 
 LOG_MODULE_REGISTER(location_module, CONFIG_APP_LOCATION_LOG_LEVEL);
 
@@ -72,6 +73,7 @@ ZBUS_CHAN_DEFINE(priv_location_chan,
 #define CHANNEL_LIST(X)								\
 	X(location_chan,	struct location_msg)			\
 	X(priv_location_chan,	struct priv_location_msg)			\
+	X(network_chan,		struct network_msg)			\
 
 /* Calculate the maximum message size from the list of channels */
 #define MAX_MSG_SIZE			MAX_MSG_SIZE_FROM_LIST(CHANNEL_LIST)
@@ -88,24 +90,41 @@ CHANNEL_LIST(ADD_OBSERVERS)
 /* Forward declarations */
 static void location_event_handler(const struct location_event_data *event_data);
 static void on_cfun(int mode, void *ctx);
+static void on_modem_init(int ret, void *ctx);
 
 NRF_MODEM_LIB_ON_CFUN(location_cfun_hook, on_cfun, NULL);
+NRF_MODEM_LIB_ON_INIT(location_init_hook, on_modem_init, NULL);
 
-static void on_cfun(int mode, void *ctx)
+static void publish_modem_lib_ready(void)
 {
 	int err;
 	struct priv_location_msg msg = { .type = LOCATION_PRIV_CFUN_REQUIRED_SET };
 
+	err = zbus_chan_pub(&priv_location_chan, &msg, PUB_TIMEOUT);
+	if (err) {
+		LOG_ERR("zbus_chan_pub, error: %d", err);
+		SEND_FATAL_ERROR();
+	}
+}
+
+static void on_modem_init(int ret, void *ctx)
+{
+	ARG_UNUSED(ctx);
+
+	if (ret != 0) {
+		return;
+	}
+
+	/* The location library requires the modem library to be initialized */
+	publish_modem_lib_ready();
+}
+
+static void on_cfun(int mode, void *ctx)
+{
 	ARG_UNUSED(ctx);
 
 	if ((mode == LTE_LC_FUNC_MODE_NORMAL) || (mode == LTE_LC_FUNC_MODE_ACTIVATE_LTE)) {
-		err = zbus_chan_pub(&priv_location_chan, &msg, PUB_TIMEOUT);
-		if (err) {
-			LOG_ERR("zbus_chan_pub, error: %d", err);
-			SEND_FATAL_ERROR();
-
-			return;
-		}
+		publish_modem_lib_ready();
 	}
 }
 
@@ -119,6 +138,11 @@ enum location_module_state {
 	STATE_RUNNING,
 		/* Location search is inactive. */
 		STATE_LOCATION_SEARCH_INACTIVE,
+		/* A search has been requested, waiting for the network module to confirm that the
+		 * modem has entered receive-only mode and completed cell selection before the
+		 * location request is started.
+		 */
+		STATE_LOCATION_SEARCH_PREPARING,
 		/* Location search is active. */
 		STATE_LOCATION_SEARCH_ACTIVE,
 };
@@ -142,8 +166,11 @@ static enum smf_state_result state_waiting_for_cfun_run(void *obj);
 static void state_running_entry(void *obj);
 static void state_location_search_inactive_entry(void *obj);
 static enum smf_state_result state_location_search_inactive_run(void *obj);
+static void state_location_search_preparing_entry(void *obj);
+static enum smf_state_result state_location_search_preparing_run(void *obj);
 static void state_location_search_active_entry(void *obj);
 static enum smf_state_result state_location_search_active_run(void *obj);
+static void state_location_search_active_exit(void *obj);
 
 /* Construct state table */
 static const struct smf_state states[] = {
@@ -165,10 +192,16 @@ static const struct smf_state states[] = {
 				 NULL,
 				 &states[STATE_RUNNING],
 				 NULL),
+	[STATE_LOCATION_SEARCH_PREPARING] =
+		SMF_CREATE_STATE(state_location_search_preparing_entry,
+				 state_location_search_preparing_run,
+				 NULL,
+				 &states[STATE_RUNNING],
+				 NULL),
 	[STATE_LOCATION_SEARCH_ACTIVE] =
 		SMF_CREATE_STATE(state_location_search_active_entry,
 				 state_location_search_active_run,
-				 NULL,
+				 state_location_search_active_exit,
 				 &states[STATE_RUNNING],
 				 NULL),
 };
@@ -332,17 +365,52 @@ static enum smf_state_result state_location_search_inactive_run(void *obj)
 		if (location_msg->type == LOCATION_SEARCH_CANCEL) {
 			LOG_DBG("Location search cancel received in inactive state, ignoring");
 		} else if (location_msg->type == LOCATION_SEARCH_TRIGGER) {
+			enum lte_lc_func_mode mode = LTE_LC_FUNC_MODE_OFFLINE;
+			struct network_msg net_msg = { .type = NETWORK_RX_ONLY_START };
+
 			LOG_DBG("Location search trigger received");
 
-			err = location_request(NULL);
+			/* If the modem is already in a mode where neighbour-cell measurements work
+			 * directly, skip the RX_ONLY hand-off and call location_request() right
+			 * away. Otherwise bring the modem up in receive-only mode and defer the
+			 * request until the network module reports SEARCH_DONE. This avoids
+			 * deadlocks during a connect/send cycle, where the network module is in
+			 * CONNECTED/SEARCHING and would silently drop NETWORK_RX_ONLY_START.
+			 */
+			err = lte_lc_func_mode_get(&mode);
 			if (err) {
-				LOG_WRN("location_request, error: %d", err);
+				LOG_WRN("lte_lc_func_mode_get, error: %d, "
+					"assuming offline", err);
+				mode = LTE_LC_FUNC_MODE_OFFLINE;
+			}
+
+			if ((mode == LTE_LC_FUNC_MODE_NORMAL) ||
+			    (mode == LTE_LC_FUNC_MODE_RX_ONLY) ||
+			    (mode == LTE_LC_FUNC_MODE_ACTIVATE_LTE)) {
+				err = location_request(NULL);
+				if (err) {
+					LOG_WRN("location_request, error: %d", err);
+					SEND_FATAL_ERROR();
+
+					return SMF_EVENT_HANDLED;
+				}
+
+				smf_set_state(SMF_CTX(state_object),
+					      &states[STATE_LOCATION_SEARCH_ACTIVE]);
+
+				return SMF_EVENT_HANDLED;
+			}
+
+			err = zbus_chan_pub(&network_chan, &net_msg, PUB_TIMEOUT);
+			if (err) {
+				LOG_ERR("zbus_chan_pub(NETWORK_RX_ONLY_START), error: %d", err);
 				SEND_FATAL_ERROR();
 
 				return SMF_EVENT_HANDLED;
 			}
 
-			smf_set_state(SMF_CTX(state_object), &states[STATE_LOCATION_SEARCH_ACTIVE]);
+			smf_set_state(SMF_CTX(state_object),
+				      &states[STATE_LOCATION_SEARCH_PREPARING]);
 
 			return SMF_EVENT_HANDLED;
 		} else if (location_msg->type == LOCATION_GNSS_SEARCH_TRIGGER) {
@@ -364,6 +432,70 @@ static enum smf_state_result state_location_search_inactive_run(void *obj)
 			}
 
 			smf_set_state(SMF_CTX(state_object), &states[STATE_LOCATION_SEARCH_ACTIVE]);
+
+			return SMF_EVENT_HANDLED;
+		}
+	}
+
+	return SMF_EVENT_PROPAGATE;
+}
+
+static void state_location_search_preparing_entry(void *obj)
+{
+	ARG_UNUSED(obj);
+
+	LOG_DBG("%s", __func__);
+}
+
+static enum smf_state_result state_location_search_preparing_run(void *obj)
+{
+	int err;
+	struct location_state_object *state_object = obj;
+
+	if (state_object->chan == &network_chan) {
+		const struct network_msg *net_msg =
+			(const struct network_msg *)state_object->msg_buf;
+
+		if (net_msg->type == NETWORK_SEARCH_DONE) {
+			LOG_DBG("Network search done, starting location request");
+
+			err = location_request(NULL);
+			if (err) {
+				LOG_WRN("location_request, error: %d", err);
+				SEND_FATAL_ERROR();
+
+				return SMF_EVENT_HANDLED;
+			}
+
+			smf_set_state(SMF_CTX(state_object),
+				      &states[STATE_LOCATION_SEARCH_ACTIVE]);
+
+			return SMF_EVENT_HANDLED;
+		}
+	} else if (state_object->chan == &location_chan) {
+		const struct location_msg *location_msg =
+			(const struct location_msg *)state_object->msg_buf;
+
+		if (location_msg->type == LOCATION_SEARCH_CANCEL) {
+			struct network_msg net_msg = { .type = NETWORK_RX_ONLY_STOP };
+
+			LOG_DBG("Search cancel received while preparing, returning to inactive");
+
+			err = zbus_chan_pub(&network_chan, &net_msg, PUB_TIMEOUT);
+			if (err) {
+				LOG_ERR("zbus_chan_pub(NETWORK_RX_ONLY_STOP), error: %d", err);
+				SEND_FATAL_ERROR();
+
+				return SMF_EVENT_HANDLED;
+			}
+
+			smf_set_state(SMF_CTX(state_object),
+				      &states[STATE_LOCATION_SEARCH_INACTIVE]);
+
+			return SMF_EVENT_HANDLED;
+		} else if (location_msg->type == LOCATION_SEARCH_TRIGGER ||
+			   location_msg->type == LOCATION_GNSS_SEARCH_TRIGGER) {
+			LOG_DBG("Trigger received while preparing, ignoring");
 
 			return SMF_EVENT_HANDLED;
 		}
@@ -412,6 +544,22 @@ static enum smf_state_result state_location_search_active_run(void *obj)
 	}
 
 	return SMF_EVENT_PROPAGATE;
+}
+
+static void state_location_search_active_exit(void *obj)
+{
+	int err;
+	struct network_msg net_msg = { .type = NETWORK_RX_ONLY_STOP };
+
+	ARG_UNUSED(obj);
+
+	/* Always release receive-only mode when the search ends.
+	 */
+	err = zbus_chan_pub(&network_chan, &net_msg, PUB_TIMEOUT);
+	if (err) {
+		LOG_ERR("zbus_chan_pub(NETWORK_RX_ONLY_STOP), error: %d", err);
+		SEND_FATAL_ERROR();
+	}
 }
 
 static void location_print_data_details(enum location_method method,

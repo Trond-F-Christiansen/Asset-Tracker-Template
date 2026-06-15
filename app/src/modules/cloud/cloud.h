@@ -127,6 +127,17 @@ enum cloud_msg_type {
 	 * reprovision devices with new credentials when the old ones expire or need rotation.
 	 */
 	CLOUD_PROVISIONING_REQUEST,
+
+	/* Request the cloud module to start a connection attempt.
+	 * The cloud module no longer connects automatically when the network becomes available,
+	 * this message must be published when the application wants to establish a cloud session
+	 */
+	CLOUD_CONNECT,
+
+	/* Request the cloud module to drop the cloud session and return to the disconnected
+	 * state. Use this after pending data has been sent to release the cloud session.
+	 */
+	CLOUD_DISCONNECT,
 };
 
 struct cloud_msg {

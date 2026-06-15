@@ -147,6 +147,7 @@ static enum smf_state_result connected_waiting_run(void *o);
 static void connected_waiting_exit(void *o);
 static void connected_sending_entry(void *o);
 static enum smf_state_result connected_sending_run(void *o);
+static void connected_sending_exit(void *o);
 
 static void fota_entry(void *o);
 static enum smf_state_result fota_run(void *o);
@@ -226,6 +227,18 @@ struct main_state {
 	 */
 	bool threshold_reached;
 
+	/* Tracks whether the LTE link is currently up. The application boots disconnected and
+	 * only attaches to the network on demand (long press), so we cannot assume that
+	 * CLOUD_CONNECT will succeed without first bringing up the link.
+	 */
+	bool network_connected;
+
+	/* Set when a long press has requested a cloud connection but the network link is not yet
+	 * up. The handler triggers NETWORK_CONNECT and defers CLOUD_CONNECT until
+	 * NETWORK_CONNECTED arrives.
+	 */
+	bool pending_cloud_connect;
+
 	/* Flags to track if each module is ready */
 	struct {
 		bool fota_ready;
@@ -302,7 +315,7 @@ static const struct smf_state states[] = {
 	[STATE_CONNECTED_SENDING] = SMF_CREATE_STATE(
 		connected_sending_entry,
 		connected_sending_run,
-		NULL,
+		connected_sending_exit,
 		&states[STATE_CONNECTED],
 		NULL
 	),
@@ -394,7 +407,7 @@ static void trigger_sampling(struct main_state *state_object)
 		.blue = 55,
 		.duration_on_msec = 250,
 		.duration_off_msec = 2000,
-		.repetitions = 10,
+		.repetitions = 3,
 	};
 
 	err = zbus_chan_pub(&led_chan, &led_msg, PUB_TIMEOUT);
@@ -504,27 +517,6 @@ static void cloud_send_now(struct main_state *state_object)
 	storage_send_data(state_object);
 	poll_triggers_send();
 
-#if defined(CONFIG_APP_LED)
-	int err;
-	/* Green pattern to indicate sending */
-	struct led_msg led_msg = {
-		.type = LED_RGB_SET,
-		.red = 0,
-		.green = 55,
-		.blue = 0,
-		.duration_on_msec = 250,
-		.duration_off_msec = 2000,
-		.repetitions = 10,
-	};
-
-	err = zbus_chan_pub(&led_chan, &led_msg, PUB_TIMEOUT);
-	if (err) {
-		LOG_ERR("Failed to publish LED pattern message, error: %d", err);
-		SEND_FATAL_ERROR();
-
-		return;
-	}
-#endif /* CONFIG_APP_LED */
 }
 
 static void timer_sample_data_work_fn(struct k_work *work)
@@ -849,6 +841,21 @@ static enum smf_state_result running_run(void *o)
 {
 	struct main_state *state_object = (struct main_state *)o;
 
+	/* Track LTE link state at the parent level so that all child states see consistent updates.
+	 *  NETWORK_DISCONNECTED can arrive while main is still in STATE_CONNECTED (after
+	 * STORAGE_BATCH_CLOSE has triggered tearing down both cloud and network), and would
+	 * otherwise be lost.
+	 */
+	if (state_object->chan == &network_chan) {
+		const struct network_msg *msg = (const struct network_msg *)state_object->msg_buf;
+
+		if (msg->type == NETWORK_CONNECTED) {
+			state_object->network_connected = true;
+		} else if (msg->type == NETWORK_DISCONNECTED) {
+			state_object->network_connected = false;
+		}
+	}
+
 	/* Handle FOTA download initiation at top level */
 	if (state_object->chan == &fota_chan) {
 		const struct fota_msg *msg = (const struct fota_msg *)state_object->msg_buf;
@@ -900,30 +907,108 @@ static void disconnected_entry(void *o)
 static enum smf_state_result disconnected_run(void *o)
 {
 	struct main_state *state_object = (struct main_state *)o;
+	int err;
+
+	/* If we are disconnected and a cloud connect was deferred until the network attaches,
+	 * fire it now. The link-up flag itself is updated by running_run (parent), so this
+	 * handler propagates after side-effects so the parent still gets to see the message.
+	 */
+	if (state_object->chan == &network_chan) {
+		const struct network_msg *msg = (const struct network_msg *)state_object->msg_buf;
+
+		if (msg->type == NETWORK_CONNECTED && state_object->pending_cloud_connect) {
+			struct cloud_msg cloud_msg = { .type = CLOUD_CONNECT };
+
+			state_object->pending_cloud_connect = false;
+
+			err = zbus_chan_pub(&cloud_chan, &cloud_msg, PUB_TIMEOUT);
+			if (err) {
+				LOG_ERR("Failed to publish CLOUD_CONNECT: %d", err);
+				SEND_FATAL_ERROR();
+
+				return SMF_EVENT_HANDLED;
+			}
+
+			/* Fall through to SMF_EVENT_PROPAGATE so running_run updates
+			 * network_connected.
+			 */
+		}
+	}
 
 	/* Handle connectivity changes */
 	if (state_object->chan == &cloud_chan) {
 		const struct cloud_msg *msg = (const struct cloud_msg *)state_object->msg_buf;
 
 		if (msg->type == CLOUD_CONNECTED) {
-			if (state_object->threshold_reached) {
-				state_object->threshold_reached = false;
-				smf_set_state(SMF_CTX(state_object),
-					      &states[STATE_CONNECTED_SENDING]);
-			} else {
-				smf_set_state(SMF_CTX(state_object), &states[STATE_CONNECTED]);
-			}
+			/* Always transition into STATE_CONNECTED first so its entry runs the
+			 * shadow/FOTA sync. If threshold_reached is set, the CONNECTED state's
+			 * shadow-response handler will move us into STATE_CONNECTED_SENDING.
+			 */
+			smf_set_state(SMF_CTX(state_object), &states[STATE_CONNECTED]);
 
 			return SMF_EVENT_HANDLED;
 		}
 	}
 
 #if defined(CONFIG_APP_BUTTON)
-	/* Ignore send trigers when disconnected */
+	/* Long press while disconnected: bring the LTE link up (if needed) and request a cloud
+	 * connection so all buffered data can be sent. threshold_reached is set so that the
+	 * CONNECTED state will move on to STATE_CONNECTED_SENDING after the shadow sync
+	 * completes. After the batch is sent the device tears down the cloud session and the
+	 * LTE link again (see connected_sending_run).
+	 */
 	if (state_object->chan == &button_chan) {
 		const struct button_msg *msg = (const struct button_msg *)state_object->msg_buf;
 
 		if (msg->type == BUTTON_PRESS_LONG) {
+			LOG_INF("Long press: requesting connect to send buffered data");
+
+			state_object->threshold_reached = true;
+
+			if (state_object->network_connected) {
+				struct cloud_msg cloud_msg = { .type = CLOUD_CONNECT };
+
+				err = zbus_chan_pub(&cloud_chan, &cloud_msg, PUB_TIMEOUT);
+				if (err) {
+					LOG_ERR("Failed to publish CLOUD_CONNECT: %d", err);
+					SEND_FATAL_ERROR();
+
+					return SMF_EVENT_HANDLED;
+				}
+			} else {
+				struct network_msg net_msg = { .type = NETWORK_CONNECT };
+
+				state_object->pending_cloud_connect = true;
+
+				err = zbus_chan_pub(&network_chan, &net_msg, PUB_TIMEOUT);
+				if (err) {
+					LOG_ERR("Failed to publish NETWORK_CONNECT: %d", err);
+					SEND_FATAL_ERROR();
+
+					return SMF_EVENT_HANDLED;
+				}
+			}
+
+#if defined(CONFIG_APP_LED)
+			/* Yellow pattern to indicate long press and connect request */
+			struct led_msg led_msg = {
+				.type = LED_RGB_SET,
+				.red = 55,
+				.green = 55,
+				.blue = 0,
+				.duration_on_msec = 250,
+				.duration_off_msec = 2000,
+				.repetitions = -1,
+			};
+
+			err = zbus_chan_pub(&led_chan, &led_msg, PUB_TIMEOUT);
+			if (err) {
+				LOG_ERR("Failed to publish LED pattern message, error: %d", err);
+				SEND_FATAL_ERROR();
+
+			}
+#endif /* CONFIG_APP_LED */
+
 			return SMF_EVENT_HANDLED;
 		}
 	}
@@ -951,33 +1036,34 @@ static void connected_entry(void *o)
 
 	state_object->running_history = STATE_CONNECTED;
 
-	/* On initial connection, update shadow reported info, and poll shadow desired and FOTA
-	 * status. Ensures synced states between device and cloud.
-	 */
-	if (!state_object->cloud_synced_on_connect) {
+	int err;
+	struct fota_msg fota_msg = { .type = FOTA_POLL_REQUEST };
 
-		int err;
-		struct fota_msg fota_msg = { .type = FOTA_POLL_REQUEST };
+	if (!state_object->cloud_synced_on_connect) {
 		struct cloud_msg cloud_msg = {
 			.type = CLOUD_SHADOW_UPDATE_REPORTED_DEVICE
 		};
 
 		err = zbus_chan_pub(&cloud_chan, &cloud_msg, PUB_TIMEOUT);
 		if (err) {
-			LOG_ERR("Failed to publish cloud shadow poll trigger, error: %d", err);
+			LOG_ERR("Failed to publish CLOUD_SHADOW_UPDATE_REPORTED_DEVICE: %d", err);
 			SEND_FATAL_ERROR();
 
 			return;
 		}
 
-		err = zbus_chan_pub(&fota_chan, &fota_msg, PUB_TIMEOUT);
-		if (err) {
-			LOG_ERR("Failed to trigger FOTA polling on cloud connection: %d", err);
-		}
-
 		poll_shadow_send(CLOUD_SHADOW_GET_DESIRED);
+
 		state_object->cloud_synced_on_connect = true;
+	} else {
+		poll_shadow_send(CLOUD_SHADOW_GET_DELTA);
 	}
+
+	err = zbus_chan_pub(&fota_chan, &fota_msg, PUB_TIMEOUT);
+	if (err) {
+		LOG_ERR("Failed to trigger FOTA polling on cloud connection: %d", err);
+	}
+
 }
 
 static enum smf_state_result connected_run(void *o)
@@ -1002,6 +1088,15 @@ static enum smf_state_result connected_run(void *o)
 		case CLOUD_SHADOW_RESPONSE_EMPTY_DESIRED:
 			handle_cloud_shadow_response(state_object, msg);
 
+			/* Any shadow response (DELTA/DESIRED, empty or not) confirms the cloud
+			 * has answered our poll, so the post-connect sync window is done.
+			 */
+			if (state_object->threshold_reached) {
+				state_object->threshold_reached = false;
+				smf_set_state(SMF_CTX(state_object),
+					      &states[STATE_CONNECTED_SENDING]);
+			}
+
 			return SMF_EVENT_HANDLED;
 		default:
 			break;
@@ -1009,13 +1104,13 @@ static enum smf_state_result connected_run(void *o)
 	}
 
 #if defined(CONFIG_APP_BUTTON)
-	/* Handle long button press to send immediately */
+	/* While connected, the application is in a short-lived send window; ignore further long
+	 * presses to avoid retriggering the send pipeline mid-batch.
+	 */
 	if (state_object->chan == &button_chan) {
 		const struct button_msg *msg = (const struct button_msg *)state_object->msg_buf;
 
 		if (msg->type == BUTTON_PRESS_LONG) {
-			smf_set_state(SMF_CTX(state_object), &states[STATE_CONNECTED_SENDING]);
-
 			return SMF_EVENT_HANDLED;
 		}
 	}
@@ -1082,27 +1177,6 @@ static void disconnected_waiting_entry(void *o)
 	LOG_DBG("%s", __func__);
 	waiting_entry_common(state_object);
 
-#if defined(CONFIG_APP_LED)
-	int err;
-	/* Red pattern indicating disconnected */
-	struct led_msg led_msg = {
-		.type = LED_RGB_SET,
-		.red = 55,
-		.green = 0,
-		.blue = 0,
-		.duration_on_msec = 250,
-		.duration_off_msec = 2000,
-		.repetitions = 10,
-	};
-
-	err = zbus_chan_pub(&led_chan, &led_msg, PUB_TIMEOUT);
-	if (err) {
-		LOG_ERR("Failed to publish LED pattern, error: %d", err);
-		SEND_FATAL_ERROR();
-
-		return;
-	}
-#endif /* CONFIG_APP_LED */
 }
 
 static enum smf_state_result disconnected_waiting_run(void *o)
@@ -1260,6 +1334,25 @@ static void connected_sending_entry(void *o)
 
 	LOG_DBG("%s", __func__);
 
+#if defined(CONFIG_APP_LED)
+	/* Green pattern to indicate sending */
+	struct led_msg led_msg = {
+		.type = LED_RGB_SET,
+		.red = 0,
+		.green = 55,
+		.blue = 0,
+		.duration_on_msec = 250,
+		.duration_off_msec = 2000,
+		.repetitions = -1,
+	};
+
+	int err = zbus_chan_pub(&led_chan, &led_msg, PUB_TIMEOUT);
+	if (err) {
+		LOG_ERR("Failed to publish LED pattern message, error: %d", err);
+		SEND_FATAL_ERROR();
+	}
+#endif /* CONFIG_APP_LED */
+
 	/* Send data immediately when entering this state */
 	cloud_send_now(state_object);
 }
@@ -1276,16 +1369,66 @@ static enum smf_state_result connected_sending_run(void *o)
 			return SMF_EVENT_HANDLED;
 		}
 
-		/* Storage batch closed indicates sending is done, go back to waiting */
+		/* Storage batch closed indicates sending is done. Tear down the cloud session and
+		 * the network attach so the device returns to disconnected sampling. The cloud
+		 * module will respond with CLOUD_DISCONNECTED, which connected_run translates into
+		 * a transition to STATE_DISCONNECTED.
+		 */
 		if (msg->type == STORAGE_BATCH_CLOSE) {
-			smf_set_state(SMF_CTX(state_object),
-				      &states[STATE_CONNECTED_WAITING]);
+			int err;
+			struct cloud_msg cloud_msg = { .type = CLOUD_DISCONNECT };
+			struct network_msg net_msg = { .type = NETWORK_DISCONNECT };
+
+			LOG_INF("Storage batch closed, tearing down cloud and network");
+
+			err = zbus_chan_pub(&cloud_chan, &cloud_msg, PUB_TIMEOUT);
+			if (err) {
+				LOG_ERR("Failed to publish CLOUD_DISCONNECT, error: %d", err);
+				SEND_FATAL_ERROR();
+
+				return SMF_EVENT_HANDLED;
+			}
+
+			err = zbus_chan_pub(&network_chan, &net_msg, PUB_TIMEOUT);
+			if (err) {
+				LOG_ERR("Failed to publish NETWORK_DISCONNECT, error: %d", err);
+				SEND_FATAL_ERROR();
+
+				return SMF_EVENT_HANDLED;
+			}
 
 			return SMF_EVENT_HANDLED;
 		}
 	}
 
 	return SMF_EVENT_PROPAGATE;
+}
+
+static void connected_sending_exit(void *o)
+{
+	ARG_UNUSED(o);
+
+	LOG_DBG("%s", __func__);
+
+#if defined(CONFIG_APP_LED)
+	/* turn off LED when exiting sending state */
+	struct led_msg led_msg = {
+		.type = LED_RGB_SET,
+		.red = 0,
+		.green = 0,
+		.blue = 0,
+		.duration_on_msec = 250,
+		.duration_off_msec = 2000,
+		.repetitions = 1,
+	};
+
+	int err = zbus_chan_pub(&led_chan, &led_msg, PUB_TIMEOUT);
+
+	if (err) {
+		LOG_ERR("Failed to publish LED pattern message, error: %d", err);
+		SEND_FATAL_ERROR();
+	}
+#endif /* CONFIG_APP_LED */
 }
 
 /* STATE_FOTA */
