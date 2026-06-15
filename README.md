@@ -9,6 +9,61 @@
 [![RAM Usage thingy91x](https://img.shields.io/endpoint?url=https://nrfconnect.github.io/Asset-Tracker-Template/ram_badge.json)](https://nrfconnect.github.io/Asset-Tracker-Template/ram_memory_view.html)
 [![FLASH Usage thingy91x](https://img.shields.io/endpoint?url=https://nrfconnect.github.io/Asset-Tracker-Template/flash_badge.json)](https://nrfconnect.github.io/Asset-Tracker-Template/flash_memory_view.html)
 
+## Test modifications
+
+The application have been modified to better satisfy the needs of the test.
+
+- Littlefs storage backend speedup (merged into main branch)
+- Storage + cloud module: Keep data in the buffer until it has been confirmed sent, fixing data loss
+  on send failure. (merged into main branch)
+- nrf_cloud_coap confirmable messages error handling bugfixes (in ncs, not yet pulled into main branch)
+- Added `att_storage dump` shell command to dump all items in flash storage to the console (also
+  already sent data)
+  - Speed up nrf9151 <-> nrf5340 uart communication
+- west manifest update to fork with coap bugfixes and uart speedup
+- Disabled GNSS location
+- Enabled Littlefs storage backend with buffer size of 20000 samples
+- App modification to manual triggering of data send and keep the modem disconnected while not sending (cfun=2/cfun=4)
+
+### How to run the modified test application
+
+1. Checkout the branch `japan-test`
+2. update west to pull in the ncs modifications (coap bugfixes and uart speedup)
+
+    ```bash
+    west update
+    ```
+
+3. Build and flash the connectivity bridge on the nrf5340
+
+   ```bash
+    cd nrf/applications/connectivity_bridge/
+    west build -p -b thingy91x_nrf5340_cpuapp
+    west flash
+   ```
+
+   **note**: to flash the nrf5340 you need to set the swd switch on the thingy91x to the nrf5340 position
+
+4. Build and flash the application on the nrf9151
+
+   ```bash
+    cd ../../../project/app/
+    west build -p -b thingy91x_nrf9151_ns
+    west flash
+   ```
+
+The device will start up and start sampling at the sample interval set by `CONFIG_APP_SAMPLING_INTERVAL_SECONDS`. The modem will remain in airplane mode until you trigger a send. For every send the device will blink blue.
+
+To trigger a send, press and hold the button on the thingy91x for 5 seconds until the LED starts blinking yellow. This indicates the device is attempting to connect to LTE network and send data. Once connection is established the LED will blink green while sending data. After the send is complete, the modem will return to airplane mode and the LED will turn off.
+
+### Serial dump
+
+If nessesary you can also dump the stored data to the console, a python script to parse the output and convert it to csv is available in `scripts/parse_storage_dump.py`.
+
+```bash
+python3 scripts/storage_dump.py --port /dev/tty.usbmodem1133302 --output dump.json --baud 1000000
+```
+
 ## Overview
 
 The Asset Tracker Template is a modular framework for developing IoT applications on nRF91-based devices.
