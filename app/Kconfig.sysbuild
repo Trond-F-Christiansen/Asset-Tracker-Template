@@ -28,3 +28,48 @@ config PARTITION_MANAGER
 	default n
 
 source "${ZEPHYR_BASE}/share/sysbuild/Kconfig"
+if BOARD_NRF9251DK_NRF9251_CPUAPP
+
+config SUPPORT_PPRCORE
+	default y
+
+config PPRCORE_REMOTE_BOARD_TARGET_CPUCLUSTER
+	default "cpuppr"
+
+config SUPPORT_PPRCORE_REMOTE
+	bool
+	default y
+
+choice PPRCORE
+
+config PPRCORE_ATT_HEARTBEAT
+	bool "PPR UART heartbeat (cpuppr child image)"
+	depends on SUPPORT_PPRCORE
+
+endchoice
+
+if PPRCORE_ATT_HEARTBEAT
+
+config PPRCORE_IMAGE_NAME
+	default "att_ppr_heartbeat"
+
+config PPRCORE_IMAGE_PATH
+	default "$(APP_DIR)/ppr_heartbeat"
+
+config PPRCORE_ATT_NO_SNIPPET
+	bool "Skip nordic-ppr snippet on cpuapp"
+	help
+	  Build and flash the PPR child image, but do NOT append the
+	  nordic-ppr snippet to the cpuapp build. This omits the cpuapp-side
+	  DT changes (cpuppr_vpr status="okay" and uart132 status="reserved"
+	  / interrupt-parent=<&cpuppr_clic>) and consequently the UICR
+	  entries the gen_periphconf_entries.py script derives from them
+	  (uart132 IRQ -> PPR, SPU130 cpuppr_vpr perm, SPU135 uart132 perm).
+
+	  Use to triage whether modem bring-up is broken by the PPR child
+	  image binary alone, or by the UICR/SPU/IRQ rewrites the snippet
+	  causes.
+
+endif # PPRCORE_ATT_HEARTBEAT
+
+endif # BOARD_NRF9251DK_NRF9251_CPUAPP
