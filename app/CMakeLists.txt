@@ -6,6 +6,9 @@
 
 cmake_minimum_required(VERSION 3.20.0)
 
+# Allow application-local board and shield definitions under boards/.
+list(APPEND BOARD_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
+
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project("Asset Tracker Template")
 
