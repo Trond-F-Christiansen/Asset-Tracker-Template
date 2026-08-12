@@ -11,4 +11,48 @@ if MEMFAULT
 config MEMFAULT_NCS_FW_VERSION
         default "$(APPVERSION)"
 
+# Widen the dependencies of the nRF Connect SDK option, which is gated on
+# SOC_SERIES_NRF91 in nrf/modules/memfault-firmware-sdk/Kconfig even though the
+# module builds and runs on nRF92. A symbol defined in more than one location
+# gets the OR of the dependencies of each definition (kconfiglib assigns
+# sym.direct_dep = _make_or(sym.direct_dep, node.dep)), so adding a second,
+# second definition here makes the option selectable on nRF92 without
+# patching the SDK and without an unmet-dependency select.
+#
+# The definition needs its own prompt: a promptless definition has zero
+# visibility, so the assignment in the board conf would be rejected and the
+# symbol would stay n. The selects are repeated because the selects of the
+# nRF Connect SDK definition only apply when its own dependencies are met.
+#
+# Remove once the dependency is widened upstream.
+config MEMFAULT_NCS_POST_COREDUMP_ON_NETWORK_CONNECTED
+	bool "Post coredump on network connected (nRF92)"
+	depends on LTE_LC_PDN_MODULE && LTE_LINK_CONTROL && SOC_SERIES_NRF92
+	select SMF
+	select SMF_ANCESTOR_SUPPORT
+	select SMF_INITIAL_TRANSITION
+
+# Widen the dependencies of the Memfault nRF Cloud CoAP transport, which is
+# gated on MODEM_JWT in modules/lib/memfault-firmware-sdk/ports/zephyr/ncs/Kconfig.
+# What it actually needs is a working JWT source for nRF Cloud authentication;
+# nRF9251 has no modem %JWT support and generates JWTs in the application
+# instead (see src/modules/cloud/cloud_jwt.c). Add a second definition that
+# accepts NRF_CLOUD_JWT_SOURCE_CUSTOM, relying on Kconfig ORing the
+# dependencies of each definition of a symbol.
+#
+# Without this the transport is silently disabled and memfault_platform_coap.c
+# is not compiled, so memfault_zephyr_port_post_data(),
+# memfault_zephyr_port_periodic_upload_enabled() and
+# nrf_cloud_coap_get_user_options() are left undefined at link time.
+#
+# Remove once the dependency is widened upstream.
+config MEMFAULT_USE_NRF_CLOUD_COAP
+	bool "Use nRF Cloud CoAP endpoint (application-generated JWT)"
+	depends on NETWORKING
+	depends on NRF_CLOUD_JWT_SOURCE_CUSTOM
+	depends on COAP
+	depends on COAP_CLIENT
+	depends on (COAP_EXTENDED_OPTIONS_LEN_VALUE >= 192)
+	depends on (NRF_CLOUD_COAP_MAX_USER_OPTIONS >= 2)
+
 endif # MEMFAULT
