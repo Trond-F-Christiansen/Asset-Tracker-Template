@@ -349,7 +349,7 @@ static void state_running_entry(void *obj)
 	err = nrf_cloud_fota_poll_init(&state_object->fota_ctx);
 	if (err) {
 		LOG_ERR("nrf_cloud_fota_poll_init failed: %d", err);
-		SEND_FATAL_ERROR();
+		// SEND_FATAL_ERROR();
 	}
 }
 
@@ -396,7 +396,7 @@ static enum smf_state_result state_waiting_for_modem_init_run(void *obj)
 
 			if (err < 0) {
 				LOG_ERR("nrf_cloud_fota_poll_process_pending failed: %d", err);
-				SEND_FATAL_ERROR();
+				// SEND_FATAL_ERROR();
 			}
 
 			publish_fota_event(FOTA_MODULE_READY);
