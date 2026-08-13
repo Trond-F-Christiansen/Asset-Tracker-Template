@@ -29,7 +29,7 @@
 #endif
 
 /* Register log module */
-LOG_MODULE_REGISTER(storage, CONFIG_APP_STORAGE_LOG_LEVEL);
+LOG_MODULE_REGISTER(storage, 4);
 
 /* Timeout for batch session activity (to prevent stuck sessions) */
 #define STORAGE_SESSION_TIMEOUT_SECONDS		CONFIG_APP_STORAGE_SESSION_TIMEOUT_SECONDS
