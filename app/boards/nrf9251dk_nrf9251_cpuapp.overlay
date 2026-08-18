@@ -9,3 +9,30 @@
 	status = "okay";
 };
 
+/ {
+	chosen {
+		nordic,memfault-coredump-partition = &memfault_coredump_partition;
+	};
+};
+
+/*
+ * MRAM has free space above the partitions defined by the board memory map, so
+ * unlike the nRF91 targets the coredump region does not have to be carved out of
+ * an application slot. secure_storage_partition ends at 0x40e000.
+ *
+ * Sized for the regions this application collects: .data and .bss alone are about
+ * 84 KiB, and CONFIG_MEMFAULT_COREDUMP_FULL_THREAD_STACKS adds the thread stacks
+ * on top. A region that is too small truncates the coredump and leaves nothing
+ * valid to upload, so keep 256 KiB and re-check after changing the collected
+ * regions.
+ */
+&mram1x {
+	partitions {
+		memfault_coredump_partition: partition@40e000 {
+			compatible = "zephyr,mapped-partition";
+			label = "memfault_coredump_partition";
+			reg = <0x0040e000 0x00040000>;
+		};
+	};
+};
+
