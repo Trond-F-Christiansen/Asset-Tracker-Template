@@ -448,7 +448,7 @@ static inline int attempt_timestamp_to_unix_ms(int64_t *uptime_ms)
 	return 0;
 }
 
-#if (defined(CONFIG_APP_POWER) || defined(CONFIG_APP_ENVIRONMENTAL))
+#if (defined(CONFIG_APP_POWER) || defined(CONFIG_APP_ENVIRONMENTAL) || defined(CONFIG_APP_LOCATION))
 static int handle_data_timestamp(int64_t *timestamp_ms)
 {
 	int err;
@@ -484,7 +484,7 @@ static int handle_data_timestamp(int64_t *timestamp_ms)
 		return err;
 	}
 }
-#endif /* CONFIG_APP_POWER || CONFIG_APP_ENVIRONMENTAL */
+#endif /* CONFIG_APP_POWER || CONFIG_APP_ENVIRONMENTAL || CONFIG_APP_LOCATION */
 
 /* Storage handling functions */
 
@@ -544,9 +544,21 @@ static int send_storage_data_to_cloud(const struct storage_data_item *item)
 	if (item->type == STORAGE_TYPE_LOCATION) {
 		const struct location_msg *loc = &item->data.LOCATION;
 
+		if (loc->type == LOCATION_CLOUD_REQUEST) {
+			timestamp_ms = loc->timestamp;
+
+			err = handle_data_timestamp(&timestamp_ms);
+			if (err) {
+				return err;
+			}
+
+			return cloud_location_request_send(&loc->cloud_request,
+							   timestamp_ms, confirmable);
+		}
+
 		return cloud_location_handle_message(loc);
 	}
-#endif /* CONFIG_APP_LOCATION && CONFIG_LOCATION_METHOD_GNSS */
+#endif /* CONFIG_APP_LOCATION */
 
 	LOG_WRN("Unknown storage data type: %d", item->type);
 
