@@ -24,6 +24,21 @@ extern "C" {
  */
 int cloud_location_handle_message(const struct location_msg *msg);
 
+/**
+ * @brief Build and send a cloud (cell/Wi-Fi) location request as a timestamped device message.
+ *
+ * Sends a GROUND_FIX device message so the resolved fix is associated with @p ts_ms rather than
+ * the time of receipt. do_reply is disabled; nRF Cloud stores the resolved location.
+ *
+ * @param request     Cellular/Wi-Fi scan data.
+ * @param ts_ms       Scan timestamp (Unix ms), or NRF_CLOUD_NO_TIMESTAMP to omit.
+ * @param confirmable Whether to use a confirmable CoAP transfer.
+ *
+ * @return 0 on success, negative error code on failure.
+ */
+int cloud_location_request_send(const struct location_cloud_request_data *request,
+				int64_t ts_ms, bool confirmable);
+
 #if defined(CONFIG_NRF_CLOUD_AGNSS)
 /**
  * @brief Cache an A-GNSS request for later processing.

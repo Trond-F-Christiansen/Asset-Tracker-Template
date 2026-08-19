@@ -8,6 +8,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/zbus/zbus.h>
 #include <net/nrf_cloud_coap.h>
+#include <net/nrf_cloud_codec.h>
 #include <zephyr/net/coap.h>
 
 #include "cloud_location.h"
@@ -136,19 +137,19 @@ static void send_request_failed(void)
 	}
 }
 
-/* Handle cloud location requests from the location module */
-static void handle_cloud_location_request(const struct location_cloud_request_data *request)
+/* Build a timestamped GROUND_FIX location request device message from cell/Wi-Fi scan data. */
+static int location_request_obj_build(struct nrf_cloud_obj *obj,
+				      const struct location_cloud_request_data *request,
+				      int64_t ts_ms)
 {
 	int err;
-	struct nrf_cloud_location_config loc_config = {
+	struct nrf_cloud_location_config cfg = {
 		.do_reply = false,
+		.hi_conf = NRF_CLOUD_LOCATION_HICONF_DEFAULT,
+		.fallback = NRF_CLOUD_LOCATION_FALLBACK_DEFAULT,
 	};
-	struct nrf_cloud_coap_location_request loc_req = {
-		.config = &loc_config,
-	};
-	struct nrf_cloud_location_result result = { 0 };
-
-	LOG_DBG("Handling cloud location request");
+	const struct lte_lc_cells_info *cell_ptr = NULL;
+	const struct wifi_scan_info *wifi_ptr = NULL;
 
 #if defined(CONFIG_LOCATION_METHOD_CELLULAR)
 	struct lte_lc_cells_info cell_info = { 0 };
@@ -165,11 +166,10 @@ static void handle_cloud_location_request(const struct location_cloud_request_da
 						   request);
 		if (err) {
 			LOG_ERR("Failed to reconstruct cellular data, error: %d", err);
-			SEND_FATAL_ERROR();
-			return;
+			return err;
 		}
 
-		loc_req.cell_info = &cell_info;
+		cell_ptr = &cell_info;
 	}
 #endif /* CONFIG_LOCATION_METHOD_CELLULAR */
 
@@ -181,31 +181,53 @@ static void handle_cloud_location_request(const struct location_cloud_request_da
 		err = wifi_ap_data_construct(&wifi_info, ap_info, ARRAY_SIZE(ap_info), request);
 		if (err) {
 			LOG_ERR("Failed to reconstruct Wi-Fi data, error: %d", err);
-			SEND_FATAL_ERROR();
-			return;
+			return err;
 		}
 
-		loc_req.wifi_info = &wifi_info;
+		wifi_ptr = &wifi_info;
 	}
 #endif /* CONFIG_LOCATION_METHOD_WIFI */
 
-	if (!loc_req.cell_info && !loc_req.wifi_info) {
+	if (!cell_ptr && !wifi_ptr) {
 		LOG_ERR("No cellular or Wi-Fi data provided for location request");
-		SEND_FATAL_ERROR();
-		return;
+		return -ENODATA;
 	}
 
-	err = nrf_cloud_coap_location_get(&loc_req, &result);
-	if ((err == COAP_RESPONSE_CODE_NOT_FOUND) || (err == COAP_RESPONSE_CODE_BAD_REQUEST)) {
-		LOG_WRN("nRF Cloud CoAP location coordinates not found, error: %d", err);
+	err = nrf_cloud_obj_location_request_create_timestamped(
+		obj, cell_ptr, wifi_ptr, &cfg,
+		(ts_ms == NRF_CLOUD_NO_TIMESTAMP) ? 0 : ts_ms);
+	if (err) {
+		LOG_ERR("nrf_cloud_obj_location_request_create_timestamped, error: %d", err);
+		return err;
+	}
 
-		return;
-	} else if (err) {
-		LOG_ERR("nrf_cloud_coap_location_get, error: %d", err);
+	return 0;
+}
 
+int cloud_location_request_send(const struct location_cloud_request_data *request,
+				int64_t ts_ms, bool confirmable)
+{
+	int err;
+	NRF_CLOUD_OBJ_JSON_DEFINE(obj);
+
+	LOG_DBG("Handling cloud location request");
+
+	err = location_request_obj_build(&obj, request, ts_ms);
+	if (err) {
+		return err;
+	}
+
+	err = nrf_cloud_coap_obj_send(&obj, confirmable);
+	(void)nrf_cloud_obj_free(&obj);
+	if (err) {
+		LOG_ERR("nrf_cloud_coap_obj_send (location request), error: %d", err);
 		send_request_failed();
-		return;
+		return err;
 	}
+
+	LOG_DBG("Cloud location request sent to nRF Cloud");
+
+	return 0;
 }
 
 #if defined(CONFIG_NRF_CLOUD_AGNSS)
@@ -341,11 +363,6 @@ void cloud_location_agnss_process_cached(void)
 int cloud_location_handle_message(const struct location_msg *msg)
 {
 	switch (msg->type) {
-	case LOCATION_CLOUD_REQUEST:
-		LOG_DBG("Cloud location request received");
-		handle_cloud_location_request(&msg->cloud_request);
-		return 0;
-
 #if defined(CONFIG_NRF_CLOUD_AGNSS)
 	case LOCATION_AGNSS_REQUEST:
 		LOG_DBG("A-GNSS data request received");

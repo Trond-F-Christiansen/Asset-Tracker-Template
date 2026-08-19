@@ -197,7 +197,7 @@ struct location_msg {
 	 *  This is either:
 	 * - Unix time in milliseconds if the system clock was synchronized at sampling time, or
 	 * - Uptime in milliseconds if the system clock was not synchronized at sampling time.
-	 * Only valid for LOCATION_GNSS_DATA events.
+	 * Valid for LOCATION_GNSS_DATA and LOCATION_CLOUD_REQUEST events.
 	 */
 	int64_t timestamp;
 };

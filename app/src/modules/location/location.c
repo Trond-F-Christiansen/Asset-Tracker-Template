@@ -187,11 +187,20 @@ static void cloud_request_send(const struct location_data_cloud *cloud_request)
 	int err;
 	struct location_msg location_msg = {
 		.type = LOCATION_CLOUD_REQUEST,
+		.timestamp = k_uptime_get(),
 	};
 
 	err = location_cloud_request_data_copy(&location_msg.cloud_request, cloud_request);
 	if (err) {
 		LOG_ERR("location_cloud_request_data_copy, error: %d", err);
+		SEND_FATAL_ERROR();
+		return;
+	}
+
+	/* Capture scan time so delayed/queued requests carry the correct timestamp. */
+	err = date_time_now(&location_msg.timestamp);
+	if (err != 0 && err != -ENODATA) {
+		LOG_ERR("date_time_now, error: %d", err);
 		SEND_FATAL_ERROR();
 		return;
 	}
