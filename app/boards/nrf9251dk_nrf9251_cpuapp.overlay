@@ -9,3 +9,7 @@
 	status = "okay";
 };
 
+&cpuapp_wifi {
+	status = "okay";
+};
+
