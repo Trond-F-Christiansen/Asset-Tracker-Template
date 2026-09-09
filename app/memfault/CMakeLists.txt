@@ -11,3 +11,5 @@ if(CONFIG_MEMFAULT_NCS_FW_VERSION_STATIC AND
         "does not match application version '${APP_VERSION_STRING}'. "
 	"These values must match, use app/VERSION to set both.")
 endif()
+
+target_sources_ifdef(CONFIG_MEMFAULT app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/metrics.c)

@@ -13,3 +13,7 @@
 	status = "okay";
 };
 
+/* Application-core die temperature via the nRFS temperature service. */
+&temp_nrfs {
+	status = "okay";
+};
