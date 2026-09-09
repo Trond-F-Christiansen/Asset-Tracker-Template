@@ -55,4 +55,8 @@ config MEMFAULT_USE_NRF_CLOUD_COAP
 	depends on (COAP_EXTENDED_OPTIONS_LEN_VALUE >= 192)
 	depends on (NRF_CLOUD_COAP_MAX_USER_OPTIONS >= 2)
 
+module = APP_MEMFAULT_METRICS
+module-str = Memfault metrics
+source "subsys/logging/Kconfig.template.log_config"
+
 endif # MEMFAULT
