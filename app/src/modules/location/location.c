@@ -137,6 +137,19 @@ struct location_state_object {
 	uint8_t msg_buf[MAX_MSG_SIZE];
 };
 
+static bool request_all_methods;
+
+static bool location_method_is_last(enum location_method method)
+{
+#if defined(CONFIG_LOCATION_METHOD_CELLULAR)
+	return method == LOCATION_METHOD_CELLULAR;
+#elif defined(CONFIG_LOCATION_METHOD_WIFI)
+	return method == LOCATION_METHOD_WIFI;
+#else
+	return method == LOCATION_METHOD_GNSS;
+#endif
+}
+
 /* Forward declarations of state handlers */
 static enum smf_state_result state_waiting_for_cfun_run(void *obj);
 static void state_running_entry(void *obj);
@@ -339,9 +352,29 @@ static enum smf_state_result state_location_search_inactive_run(void *obj)
 		if (location_msg->type == LOCATION_SEARCH_CANCEL) {
 			LOG_DBG("Location search cancel received in inactive state, ignoring");
 		} else if (location_msg->type == LOCATION_SEARCH_TRIGGER) {
+			struct location_config config;
+			enum location_method methods[] = {
+#if defined(CONFIG_LOCATION_METHOD_GNSS)
+				LOCATION_METHOD_GNSS,
+#endif
+#if defined(CONFIG_LOCATION_METHOD_WIFI)
+				LOCATION_METHOD_WIFI,
+#endif
+#if defined(CONFIG_LOCATION_METHOD_CELLULAR)
+				LOCATION_METHOD_CELLULAR,
+#endif
+			};
+
 			LOG_DBG("Location search trigger received");
 
-			err = location_request(NULL);
+			/* Run every configured method on each search instead of stopping at the
+			 * first fix.
+			 */
+			request_all_methods = true;
+			location_config_defaults_set(&config, ARRAY_SIZE(methods), methods);
+			config.mode = LOCATION_REQ_MODE_ALL;
+
+			err = location_request(&config);
 			if (err) {
 				LOG_WRN("location_request, error: %d", err);
 				SEND_FATAL_ERROR();
@@ -360,7 +393,8 @@ static enum smf_state_result state_location_search_inactive_run(void *obj)
 
 			LOG_DBG("GNSS fix trigger received");
 
-			location_config_defaults_set(&config, 1, methods);
+			request_all_methods = false;
+			location_config_defaults_set(&config, ARRAY_SIZE(methods), methods);
 
 			err = location_request(&config);
 			if (err) {
@@ -400,6 +434,7 @@ static enum smf_state_result state_location_search_active_run(void *obj)
 			LOG_DBG("Location trigger received while active, ignoring");
 		} else if (location_msg->type == LOCATION_SEARCH_CANCEL) {
 			LOG_DBG("Location search cancel received, cancelling location request");
+			request_all_methods = false;
 
 			err = location_request_cancel();
 			if (err) {
@@ -493,7 +528,9 @@ static void location_event_handler(const struct location_event_data *event_data)
 		}
 #endif /* CONFIG_LOCATION_METHOD_GNSS */
 
-		message_send(LOCATION_SEARCH_DONE);
+		if (!request_all_methods || location_method_is_last(event_data->method)) {
+			message_send(LOCATION_SEARCH_DONE);
+		}
 		break;
 	case LOCATION_EVT_STARTED:
 		message_send(LOCATION_SEARCH_STARTED);
@@ -501,6 +538,7 @@ static void location_event_handler(const struct location_event_data *event_data)
 	case LOCATION_EVT_TIMEOUT:
 		LOG_DBG("Getting location timed out");
 		message_send(LOCATION_SEARCH_DONE);
+		request_all_methods = false;
 		break;
 	case LOCATION_EVT_ERROR:
 		LOG_WRN("Location request failed:");
@@ -509,7 +547,9 @@ static void location_event_handler(const struct location_event_data *event_data)
 
 		location_print_data_details(event_data->method, &event_data->error.details);
 
-		message_send(LOCATION_SEARCH_DONE);
+		if (!request_all_methods || location_method_is_last(event_data->method)) {
+			message_send(LOCATION_SEARCH_DONE);
+		}
 		break;
 	case LOCATION_EVT_FALLBACK:
 		LOG_DBG("Location request fallback has occurred:");
@@ -531,12 +571,10 @@ static void location_event_handler(const struct location_event_data *event_data)
 
 		cloud_request_send(&event_data->cloud_location_request);
 
-		/* Cancel the current location request to avoid falling back to the next
-		 * location source. Treat the fact that we have found Wi-Fi APs and/or cellular data
-		 * as a successful location request, even if we don't know whether the
-		 * cloud is able to resolve data to a location or not.
+		/* Report the result as unknown so the library proceeds to the next method instead
+		 * of aborting the remaining LOCATION_REQ_MODE_ALL methods.
 		 */
-		message_send(LOCATION_SEARCH_CANCEL);
+		location_cloud_location_ext_result_set(LOCATION_EXT_RESULT_UNKNOWN, NULL);
 		break;
 #endif /* CONFIG_LOCATION_METHOD_WIFI || CONFIG_LOCATION_METHOD_CELLULAR */
 #if defined(CONFIG_NRF_CLOUD_AGNSS)
