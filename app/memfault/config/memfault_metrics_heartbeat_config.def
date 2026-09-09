@@ -1,0 +1,32 @@
+/*
+ * Copyright (c) 2026 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+/*
+ * Application-specific Memfault heartbeat metrics.
+ *
+ * This file is picked up automatically by the Memfault SDK because
+ * "memfault/config" is on the include path (see app/CMakeLists.txt) and
+ * CONFIG_MEMFAULT_USER_CONFIG_ENABLE defaults to y.
+ */
+
+#if defined(CONFIG_MODEM_INFO)
+/* IMEI is 15 digits. */
+MEMFAULT_METRICS_STRING_KEY_DEFINE(imei, 15)
+#endif /* defined(CONFIG_MODEM_INFO) */
+
+#if defined(CONFIG_TEMP_NRFS)
+/* Application-core die temperature. Stored in centi-degrees C; the scale value
+ * makes Memfault display it in degrees C with two decimals.
+ */
+MEMFAULT_METRICS_KEY_DEFINE_WITH_SCALE_VALUE(app_temp_c, kMemfaultMetricType_Signed, 100)
+#endif /* defined(CONFIG_TEMP_NRFS) */
+
+#if defined(CONFIG_NRF_MODEM_LIB)
+/* Modem temperature in whole degrees C (AT%XTEMP?). */
+MEMFAULT_METRICS_KEY_DEFINE(modem_temp_c, kMemfaultMetricType_Signed)
+/* Modem supply voltage in millivolts (AT%XVBAT). */
+MEMFAULT_METRICS_KEY_DEFINE(modem_vbat_mv, kMemfaultMetricType_Unsigned)
+#endif /* defined(CONFIG_NRF_MODEM_LIB) */

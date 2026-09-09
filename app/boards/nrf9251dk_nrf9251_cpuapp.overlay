@@ -94,3 +94,7 @@ flash_ext: &gd25le255e {
 		};
 	};
 };
+/* Application-core die temperature via the nRFS temperature service. */
+&temp_nrfs {
+	status = "okay";
+};
