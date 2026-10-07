@@ -15,6 +15,12 @@ flash_ext: &gd25wb256 {
 /delete-node/ &tfm_otp_partition;
 #include "../../../boards/att_flash_partitions.dtsi"
 
+/ {
+	nordic-tz-secure {
+		/delete-property/ data-partitions;
+	};
+};
+
 &uart0 {
 	status = "okay";
 	current-speed = <1000000>;

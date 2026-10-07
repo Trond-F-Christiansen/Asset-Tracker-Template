@@ -27,3 +27,9 @@ flash_ext: &gd25wb256 {
 /delete-node/ &tfm_otp_partition;
 #include "att_flash_partitions.dtsi"
 #include "att_sram_partitions.dtsi"
+
+/ {
+	nordic-tz-secure {
+		/delete-property/ data-partitions;
+	};
+};
