@@ -5,8 +5,10 @@
 #
 # Sysbuild writes one merged_<board_target>.hex per board target. nRF91 builds
 # get two (bootloaders and provisioning on the secure target, TF-M + app on
-# /ns). Files that are not produced by the current build are skipped, so each
-# build only merges its own board's files. Inputs must not overlap.
+# /ns); nRF9251 builds get one per core. Files that are not produced by the
+# current build are skipped, so each build only merges its own board's files.
+# Inputs must not overlap. On nRF92 the inputs are already padded to 16-byte
+# MRAM lines (SB_CONFIG_ATT_MERGED_HEX_PAD).
 merged.hex:
   # nrf9151dk/nrf9151/ns
   - merged_nrf9151dk_nrf9151.hex
@@ -14,3 +16,6 @@ merged.hex:
   # thingy91x/nrf9151/ns
   - merged_thingy91x_nrf9151.hex
   - merged_thingy91x_nrf9151_ns.hex
+  # nrf9251dk/nrf9251/cpuapp (cpuppr only when the PPR image is built)
+  - merged_nrf9251dk_0_1_0_nrf9251_cpuapp.hex
+  - merged_nrf9251dk_0_1_0_nrf9251_cpuppr.hex

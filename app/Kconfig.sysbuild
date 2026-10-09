@@ -18,6 +18,17 @@ config SECURE_BOOT_APPCORE
 config MERGED_HEX_FILES
 	default y
 
+config ATT_MERGED_HEX_PAD
+	bool "Pad merged hex files to 16-byte MRAM lines"
+	depends on MERGED_HEX_FILES
+	default y if SOC_SERIES_NRF92
+	help
+	  Pad every segment of the merged_<board_target>.hex files with 0xFF to
+	  a 16-byte boundary (scripts/pad_hex.py). Needed to program nRF92 MRAM
+	  with J-Link using the generic CORTEX-M33 device, which otherwise loses
+	  the bytes of a partial last line and aborts the download. nrfutil does
+	  not need it.
+
 # Shared NSIB (b0) signing key for all ATT sysbuild targets. Sysbuild signs images with this
 # key; b0 verifies them. Without this, sysbuild autogenerates a new debug key on each pristine
 # build. Not for production.
