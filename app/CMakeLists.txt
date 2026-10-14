@@ -30,6 +30,7 @@ add_subdirectory(memfault)
 # Optional modules
 add_subdirectory_ifdef(CONFIG_APP_BUTTON src/modules/button)
 add_subdirectory_ifdef(CONFIG_APP_POWER src/modules/power)
+add_subdirectory_ifdef(CONFIG_APP_POWER_MONITOR src/modules/power_monitor)
 add_subdirectory_ifdef(CONFIG_APP_ENVIRONMENTAL src/modules/environmental)
 add_subdirectory_ifdef(CONFIG_APP_LED src/modules/led)
 add_subdirectory_ifdef(CONFIG_APP_LOCATION src/modules/location)

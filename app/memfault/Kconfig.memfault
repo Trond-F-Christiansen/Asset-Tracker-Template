@@ -55,6 +55,26 @@ config MEMFAULT_USE_NRF_CLOUD_COAP
 	depends on (COAP_EXTENDED_OPTIONS_LEN_VALUE >= 192)
 	depends on (NRF_CLOUD_COAP_MAX_USER_OPTIONS >= 2)
 
+config APP_MEMFAULT_SYNC_WITH_SAMPLING
+	bool "Take Memfault heartbeats and upload Memfault data in the sample cycle"
+	depends on MEMFAULT_HTTP_ENABLE || MEMFAULT_USE_NRF_CLOUD_COAP
+	select MEMFAULT_METRICS_TIMER_CUSTOM
+	help
+	  Replace the Memfault SDK heartbeat and periodic upload timers with the
+	  application's sample cycle: a heartbeat is taken when the location search of every
+	  sample cycle is done, and all pending Memfault data is uploaded after the
+	  application data has been sent. The heartbeat interval then follows the sample
+	  interval.
+	  Requires CONFIG_MEMFAULT_PERIODIC_UPLOAD=n.
+
+config APP_MEMFAULT_SYNC_STACK_SIZE
+	int "Memfault sync workqueue stack size"
+	depends on APP_MEMFAULT_SYNC_WITH_SAMPLING
+	default 2048
+	help
+	  Stack for the workqueue that runs heartbeat collection (all
+	  memfault_metrics_heartbeat_collect_data() hooks) and Memfault uploads.
+
 module = APP_MEMFAULT_METRICS
 module-str = Memfault metrics
 source "subsys/logging/Kconfig.template.log_config"

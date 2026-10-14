@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
+#include "nrf9251dk_common.overlay"
+
 /* Used for hardware fallback by task watchdog. */
 &wdt010 {
 	status = "okay";
@@ -17,43 +19,3 @@
 &temp_nrfs {
 	status = "okay";
 };
-
-&mram1x {
-	partitions {
-		/* Shrink the slot0 partition to make room for the Memfault coredump partition. */
-		cpuapp_slot0_partition: partition@322000 {
-			compatible = "zephyr,mapped-partition";
-			reg = <0x322000 DT_SIZE_K(588)>;
-		};
-
-		/* Add the Memfault coredump partition. */
-		memfault_coredump_partition: partition@3b5000 {
-			compatible = "zephyr,mapped-partition";
-			reg = <0x3b5000 DT_SIZE_K(64)>;
-		};
-
-		/* shrink the slot1 partition to match the changes made to slot0. */
-		cpuapp_slot1_partition: partition@40a000 {
-			compatible = "zephyr,mapped-partition";
-			reg = <0x40a000 DT_SIZE_K(588)>;
-		};
-	};
-};
-
-
-/*
- * SMP gets its own UART on VCOM1 so that VCOM0 (uart133) stays a pure console for
- * the MCUboot and application logs. uart132 is otherwise the cpuppr console, so
- * this conflicts with the PPR heartbeat child image (SB_CONFIG_PPRCORE_ATT_HEARTBEAT).
- */
-&uart132 {
-	status = "okay";
-	memory-regions = <&cpuapp_dma_region>;
-};
-
-/ {
-	chosen {
-		zephyr,uart-mcumgr = &uart132;
-	};
-};
-
