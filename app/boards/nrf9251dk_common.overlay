@@ -1,0 +1,79 @@
+/*
+ * Copyright (c) 2026 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+/*
+ * SMP gets its own UART on VCOM1 so that VCOM0 (uart133) stays a pure console for
+ * the MCUboot and application logs. uart132 is otherwise the cpuppr console, so
+ * this conflicts with the PPR heartbeat child image (SB_CONFIG_PPRCORE_ATT_HEARTBEAT).
+ */
+&uart132 {
+	status = "okay";
+	memory-regions = <&cpuapp_dma_region>;
+};
+
+/ {
+	chosen {
+		zephyr,uart-mcumgr = &uart132;
+	};
+};
+
+ /*
+ * INA228 power monitor on TWIM130: SDA = P2.3, SCL = P2.0.
+ * INA228 VDD = 5.0v
+ * INA228 Vin -> VDD_nRF (p4)
+ *
+ * nRF9251 datasheet (GPIO port mapping): TWIM SCL must be on P1.0-P1.3 or P2.0-P2.2, and
+ * those pins cannot be used for other TWIM signals. Pins that do not follow this build fine
+ * but stall the bus after START.
+ *
+ * Adafruit breakout board:
+ *  - Vdd requires 2.7v - 5.5v
+ *  - I2C lines are pulled up to VDD by default on the Adafruit breakout board, this needs to be
+ *	modified to work with the 1.8v gpio on the nrf9251dk. Disconnecting the pull-ups on the I2C
+ * 	and replacing them with internal pull-ups to VDDIO is the cleanest approach.
+ *  - SB VBUS - VIN+ bridged
+ *
+ * Keep in sync with sysbuild/mcuboot/boards/nrf9251dk_nrf9251_cpuapp.overlay.
+ */
+&pinctrl {
+	i2c130_default: i2c130_default {
+		group1 {
+			psels = <NRF_PSEL(TWIM_SDA, 2, 3)>,
+				<NRF_PSEL(TWIM_SCL, 2, 0)>;
+			bias-pull-up;
+		};
+	};
+
+	i2c130_sleep: i2c130_sleep {
+		group1 {
+			psels = <NRF_PSEL(TWIM_SDA, 2, 3)>,
+				<NRF_PSEL(TWIM_SCL, 2, 0)>;
+			low-power-enable;
+		};
+	};
+};
+
+&i2c130 {
+	status = "okay";
+	clock-frequency = <I2C_BITRATE_STANDARD>;
+	pinctrl-0 = <&i2c130_default>;
+	pinctrl-1 = <&i2c130_sleep>;
+	pinctrl-names = "default", "sleep";
+	zephyr,concat-buf-size = <256>;
+	memory-regions = <&cpuapp_dma_region>;
+
+	sip_power_monitor: ina228@40 {
+		compatible = "ti,ina228";
+		reg = <0x40>;
+		/* Full scale 163.84 mV / 0.3 Ohm = 546 mA, 546 mA / 2^19 ~= 1 uA */
+		current-lsb-microamps = <1>;
+		rshunt-micro-ohms = <300000>;
+		adc-mode = "Bus and shunt voltage continuous";
+		vbus-conversion-time-us = <1052>;
+		vshunt-conversion-time-us = <1052>;
+		avg-count = <16>;
+	};
+};

@@ -1,0 +1,47 @@
+#
+# Copyright (c) 2026 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+menuconfig APP_POWER_MONITOR
+	bool "Power monitor module (INA228)"
+	depends on DT_HAS_TI_INA228_ENABLED
+	select SENSOR
+	default y
+	help
+	  Reads a TI INA228 power monitor (devicetree node label "sip_power_monitor")
+	  on demand using the Zephyr sensor driver. Energy and charge are integrated by the
+	  INA228 hardware accumulators between readouts. Reports voltage, current, power,
+	  energy and average current through logs, shell commands and Memfault metrics.
+
+if APP_POWER_MONITOR
+
+config APP_POWER_MONITOR_MAX_READ_INTERVAL_HOURS
+	int "Maximum time between readouts"
+	default 10
+	range 0 240
+	help
+	  The INA228 is read when data is needed (shell command, Memfault heartbeat). If
+	  nothing has read it for this many hours, a safety readout is done on the system
+	  workqueue so that the hardware charge accumulator cannot overflow. With a 1 uA
+	  current LSB it overflows after about 550000 C: about 11 days at the 546 mA full
+	  scale of a 300 mOhm shunt. Set to 0 to disable the safety readout.
+
+config APP_POWER_MONITOR_LOG_SAMPLES
+	bool "Log every readout"
+	default n
+	help
+	  Log voltage, current, power and the average current since the previous readout
+	  at every readout.
+
+config APP_POWER_MONITOR_SHELL
+	bool "Power monitor shell commands"
+	depends on SHELL
+	default y
+
+module = APP_POWER_MONITOR
+module-str = Power monitor
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # APP_POWER_MONITOR

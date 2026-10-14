@@ -33,6 +33,10 @@
 #include <zephyr/drivers/sensor.h>
 #endif /* defined(CONFIG_TEMP_NRFS) */
 
+#if defined(CONFIG_APP_POWER_MONITOR)
+#include "power_monitor.h"
+#endif /* defined(CONFIG_APP_POWER_MONITOR) */
+
 LOG_MODULE_REGISTER(app_memfault_metrics, CONFIG_APP_MEMFAULT_METRICS_LOG_LEVEL);
 
 #if defined(CONFIG_MODEM_INFO)
@@ -145,4 +149,8 @@ void memfault_metrics_heartbeat_collect_data(void)
 #if defined(CONFIG_TEMP_NRFS)
 	app_temp_collect();
 #endif /* defined(CONFIG_TEMP_NRFS) */
+
+#if defined(CONFIG_APP_POWER_MONITOR)
+	power_monitor_metrics_collect();
+#endif /* defined(CONFIG_APP_POWER_MONITOR) */
 }

@@ -36,6 +36,10 @@
 #include "power.h"
 #endif /* CONFIG_APP_POWER */
 
+#if defined(CONFIG_APP_MEMFAULT_SYNC_WITH_SAMPLING)
+#include "memfault_sync.h"
+#endif /* CONFIG_APP_MEMFAULT_SYNC_WITH_SAMPLING */
+
 BUILD_ASSERT(CONFIG_APP_WATCHDOG_TIMEOUT_SECONDS >
 	     CONFIG_APP_MSG_PROCESSING_TIMEOUT_SECONDS,
 	     "Watchdog timeout must be greater than maximum message processing time");
@@ -1075,6 +1079,15 @@ static enum smf_state_result disconnected_sampling_run(void *o)
 		const struct location_msg *msg = (const struct location_msg *)state_object->msg_buf;
 
 		if (msg->type == LOCATION_SEARCH_DONE) {
+#if defined(CONFIG_APP_MEMFAULT_SYNC_WITH_SAMPLING)
+			/* Close the Memfault heartbeat once per sample cycle, after the location
+			 * search: heartbeat collection sends modem AT commands, which must not
+			 * run concurrently with the start of a location search. The heartbeat
+			 * also includes this cycle's location metrics, and is uploaded after
+			 * this cycle's data is sent.
+			 */
+			memfault_sync_heartbeat_trigger();
+#endif /* CONFIG_APP_MEMFAULT_SYNC_WITH_SAMPLING */
 			smf_set_state(SMF_CTX(state_object), &states[STATE_DISCONNECTED_WAITING]);
 
 			return SMF_EVENT_HANDLED;
@@ -1181,6 +1194,15 @@ static enum smf_state_result connected_sampling_run(void *o)
 		const struct location_msg *msg = (const struct location_msg *)state_object->msg_buf;
 
 		if (msg->type == LOCATION_SEARCH_DONE) {
+#if defined(CONFIG_APP_MEMFAULT_SYNC_WITH_SAMPLING)
+			/* Close the Memfault heartbeat once per sample cycle, after the location
+			 * search: heartbeat collection sends modem AT commands, which must not
+			 * run concurrently with the start of a location search. The heartbeat
+			 * also includes this cycle's location metrics, and is uploaded after
+			 * this cycle's data is sent.
+			 */
+			memfault_sync_heartbeat_trigger();
+#endif /* CONFIG_APP_MEMFAULT_SYNC_WITH_SAMPLING */
 			smf_set_state(SMF_CTX(state_object), &states[STATE_CONNECTED_WAITING]);
 			return SMF_EVENT_HANDLED;
 		}
@@ -1280,6 +1302,12 @@ static enum smf_state_result connected_sending_run(void *o)
 		 * any FOTA download doesn't have race conditions with storage or sending.
 		 */
 		if (msg->type == STORAGE_BATCH_CLOSE) {
+#if defined(CONFIG_APP_MEMFAULT_SYNC_WITH_SAMPLING)
+			/* Upload Memfault data in the same connection as the application data.
+			 * Queued before the FOTA poll, as a FOTA update may reboot the device.
+			 */
+			memfault_sync_upload_trigger();
+#endif /* CONFIG_APP_MEMFAULT_SYNC_WITH_SAMPLING */
 			poll_triggers_send();
 			smf_set_state(SMF_CTX(state_object),
 				      &states[STATE_CONNECTED_WAITING]);

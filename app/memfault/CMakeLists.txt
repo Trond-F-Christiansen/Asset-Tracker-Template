@@ -13,3 +13,7 @@ if(CONFIG_MEMFAULT_NCS_FW_VERSION_STATIC AND
 endif()
 
 target_sources_ifdef(CONFIG_MEMFAULT app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/metrics.c)
+target_sources_ifdef(CONFIG_APP_MEMFAULT_SYNC_WITH_SAMPLING app PRIVATE
+	${CMAKE_CURRENT_SOURCE_DIR}/memfault_sync.c
+)
+target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

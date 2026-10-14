@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
+#include "nrf9251dk_common.overlay"
+
 /* Used for hardware fallback by task watchdog. */
 &wdt010 {
 	status = "okay";
