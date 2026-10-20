@@ -1,0 +1,31 @@
+/*
+ * Copyright (c) 2026 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+/* SAADC sampling AIN1 (P1.1). The same node is used by the application core when the module
+ * runs there, see boards/nrf9251dk_nrf9251_cpuapp.overlay.
+ */
+
+/ {
+	zephyr,user {
+		io-channels = <&adc 0>;
+	};
+};
+
+&adc {
+	status = "okay";
+	memory-regions = <&cpuppr_dma_region>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel@0 {
+		reg = <0>;
+		zephyr,gain = "ADC_GAIN_1_2";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,input-positive = <NRF_SAADC_AIN1>;
+		zephyr,resolution = <12>;
+	};
+};

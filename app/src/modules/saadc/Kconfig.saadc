@@ -1,0 +1,71 @@
+#
+# Copyright (c) 2026 Nordic Semiconductor
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+menuconfig APP_SAADC
+	bool "SAADC module"
+	# The PPR image places the implementation next to a shadow of saadc_chan.
+	select APP_ZBUS_PROXY if BOARD_NRF9251DK_NRF9251_CPUPPR
+	select ZBUS if BOARD_NRF9251DK_NRF9251_CPUPPR
+	select ADC if !APP_SAADC_REMOTE
+	select SMF if !APP_SAADC_REMOTE
+	select ZBUS_MSG_SUBSCRIBER if !APP_SAADC_REMOTE
+	help
+	  Zbus controlled SAADC sampling. The module is enabled in the application core image. The
+	  core that runs the implementation is selected in sysbuild with SB_CONFIG_ATT_SAADC_ON_PPR.
+
+if APP_SAADC
+
+config APP_SAADC_REMOTE
+	bool "SAADC implementation runs on the PPR core"
+	depends on !BOARD_NRF9251DK_NRF9251_CPUPPR
+	select APP_ZBUS_PROXY
+	help
+	  Set by sysbuild (SB_CONFIG_ATT_SAADC_ON_PPR), do not set manually. The application core
+	  then only owns saadc_chan and forwards it to the PPR core with the zbus proxy agent, and
+	  receives saadc_resp_chan from it.
+
+config APP_SAADC_SHELL
+	bool "SAADC module shell"
+	depends on !BOARD_NRF9251DK_NRF9251_CPUPPR
+	default y if SHELL
+	help
+	  Enable shell for the SAADC module. The shell always runs on the application core.
+
+config APP_SAADC_SHELL_TIMEOUT_MS
+	int "Shell wait time for a sample response in milliseconds"
+	depends on APP_SAADC_SHELL
+	default 3000
+
+config APP_SAADC_THREAD_STACK_SIZE
+	int "Thread stack size"
+	depends on !APP_SAADC_REMOTE
+	default 1024
+
+config APP_SAADC_WATCHDOG_TIMEOUT_SECONDS
+	int "Watchdog timeout"
+	depends on !APP_SAADC_REMOTE && TASK_WDT
+	default 120
+	help
+	  Timeout in seconds for the SAADC module watchdog.
+	  The timeout given in this option covers both:
+	    * Waiting for an incoming message in zbus_sub_wait_msg().
+	    * Time spent processing the message, defined by
+	      CONFIG_APP_SAADC_MSG_PROCESSING_TIMEOUT_SECONDS.
+	  Ensure that this value exceeds CONFIG_APP_SAADC_MSG_PROCESSING_TIMEOUT_SECONDS.
+
+config APP_SAADC_MSG_PROCESSING_TIMEOUT_SECONDS
+	int "Maximum message processing time"
+	depends on !APP_SAADC_REMOTE && TASK_WDT
+	default 3
+	help
+	  Maximum time allowed for processing a single message in the module's state machine.
+	  The value must be smaller than CONFIG_APP_SAADC_WATCHDOG_TIMEOUT_SECONDS.
+
+module = APP_SAADC
+module-str = SAADC
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # APP_SAADC

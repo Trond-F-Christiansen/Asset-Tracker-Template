@@ -12,6 +12,7 @@ project("Asset Tracker Template PPR")
 # Modules shared with the application core image, enabled by the fragments that
 # app/sysbuild.cmake adds when a module is placed on the PPR core.
 set(APP_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../src)
+zephyr_include_directories(${APP_SRC}/common)
 zephyr_include_directories(${APP_SRC}/zbus_proxy)
 
 target_sources(app PRIVATE src/main.c)
@@ -21,4 +22,7 @@ if(CONFIG_APP_ZBUS_PROXY)
 endif()
 if(CONFIG_APP_PWM)
   add_subdirectory(${APP_SRC}/modules/pwm ${CMAKE_CURRENT_BINARY_DIR}/pwm)
+endif()
+if(CONFIG_APP_SAADC)
+  add_subdirectory(${APP_SRC}/modules/saadc ${CMAKE_CURRENT_BINARY_DIR}/saadc)
 endif()

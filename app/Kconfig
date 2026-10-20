@@ -20,6 +20,7 @@ rsource "src/modules/button/Kconfig.button"
 rsource "src/modules/storage/Kconfig.storage"
 rsource "src/zbus_proxy/Kconfig.zbus_proxy"
 rsource "src/modules/pwm/Kconfig.pwm"
+rsource "src/modules/saadc/Kconfig.saadc"
 rsource "memfault/Kconfig.memfault"
 
 endmenu

@@ -23,5 +23,6 @@ endif # PPR_HELLO
 # Modules shared with the application core image.
 rsource "../src/zbus_proxy/Kconfig.zbus_proxy"
 rsource "../src/modules/pwm/Kconfig.pwm"
+rsource "../src/modules/saadc/Kconfig.saadc"
 
 source "Kconfig.zephyr"
