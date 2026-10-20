@@ -1,0 +1,24 @@
+/*
+ * Copyright (c) 2026 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+/* PPR core side of the zbus proxy agent. Added to the PPR image by app/sysbuild.cmake, see
+ * app.overlay and ipc.dtsi.
+ */
+
+#include "ipc.dtsi"
+
+&cpuapp_cpuppr_zbus_ipc {
+	mbox-names = "tx", "rx";
+	tx-region = <&cpuppr_cpuapp_zbus_shm>;
+	rx-region = <&cpuapp_cpuppr_zbus_shm>;
+};
+
+/* The top 4 KB of the PPR RAM are shared memory: 2 KB for the log link (board files) and 2 KB
+ * for the zbus proxy agent (ipc.dtsi). Keep them out of the image's RAM.
+ */
+&cpuppr_tcm_sram {
+	reg = <0x2fc00000 DT_SIZE_K(60)>;
+};

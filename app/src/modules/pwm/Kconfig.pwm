@@ -1,0 +1,50 @@
+#
+# Copyright (c) 2026 Nordic Semiconductor
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+menuconfig APP_PWM
+	bool "PWM module"
+	# The PPR image places the implementation next to a shadow of pwm_chan.
+	select APP_ZBUS_PROXY if BOARD_NRF9251DK_NRF9251_CPUPPR
+	select ZBUS if BOARD_NRF9251DK_NRF9251_CPUPPR
+	select PWM if !APP_PWM_REMOTE
+	help
+	  Zbus controlled PWM output. The module is enabled in the application core image. The
+	  core that runs the implementation is selected in sysbuild with SB_CONFIG_ATT_PWM_ON_PPR.
+
+if APP_PWM
+
+config APP_PWM_REMOTE
+	bool "PWM implementation runs on the PPR core"
+	depends on !BOARD_NRF9251DK_NRF9251_CPUPPR
+	select APP_ZBUS_PROXY
+	help
+	  Set by sysbuild (SB_CONFIG_ATT_PWM_ON_PPR), do not set manually. The application core
+	  then only owns pwm_chan and forwards it to the PPR core with the zbus proxy agent.
+
+config APP_PWM_SHELL
+	bool "PWM module shell"
+	depends on !BOARD_NRF9251DK_NRF9251_CPUPPR
+	default y if SHELL
+	help
+	  Enable shell for the PWM module. The shell always runs on the application core.
+
+config APP_PWM_DEFAULT_PERIOD_USEC
+	int "Default PWM period in microseconds"
+	default 1000
+	help
+	  Period used by PWM_ON before a PWM_SET message has been received.
+
+config APP_PWM_DEFAULT_PULSE_USEC
+	int "Default PWM pulse width in microseconds"
+	default 500
+	help
+	  Pulse width used by PWM_ON before a PWM_SET message has been received.
+
+module = APP_PWM
+module-str = PWM
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # APP_PWM

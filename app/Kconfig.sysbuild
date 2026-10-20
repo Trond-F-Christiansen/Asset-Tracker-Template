@@ -58,6 +58,14 @@ config PPRCORE_IMAGE_PATH
 
 endif # SUPPORT_PPRCORE
 
+config ATT_PWM_ON_PPR
+	bool "Run the PWM module on the PPR core"
+	depends on LAUNCH_PPR
+	help
+	  Run the PWM module implementation (pwm130 on P2.2) on the PPR core instead of the
+	  application core. pwm_chan is forwarded to the PPR core with the zbus proxy agent. The
+	  att_pwm shell commands always run on the application core.
+
 source "${ZEPHYR_BASE}/share/sysbuild/Kconfig"
 
 if BOARD_NRF9251DK_NRF9251_CPUAPP

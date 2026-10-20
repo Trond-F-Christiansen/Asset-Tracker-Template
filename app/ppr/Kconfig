@@ -20,4 +20,8 @@ config PPR_HELLO_INTERVAL_SECONDS
 
 endif # PPR_HELLO
 
+# Modules shared with the application core image.
+rsource "../src/zbus_proxy/Kconfig.zbus_proxy"
+rsource "../src/modules/pwm/Kconfig.pwm"
+
 source "Kconfig.zephyr"

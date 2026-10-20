@@ -1,0 +1,50 @@
+/*
+ * Copyright (c) 2026 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+/* Dedicated icmsg instance between the application core and the PPR core for the zbus proxy
+ * agent. It is separate from cpuapp_cpuppr_ipc, which carries the log link as icmsg-me: the
+ * proxy agent opens its IPC instance itself, and a second open of a shared instance fails with
+ * -EALREADY.
+ *
+ * Shared by app.overlay and ppr.overlay, which add the per-core
+ * mbox-names and tx/rx regions.
+ *
+ * Resources used, none of which are taken by the board files:
+ * - Application core bellboard bell 15, rung by the PPR core.
+ * - PPR VEVIF task 13, triggered by the application core.
+ * - 2 x 1 KB of shared memory at the top of the PPR RAM, right below cpuapp_cpuppr_ipc_shm.
+ *   The PPR image gives up this memory, see ppr.overlay.
+ */
+
+/ {
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		cpuapp_cpuppr_zbus_shm: memory@2fc0f000 {
+			reg = <0x2fc0f000 DT_SIZE_K(1)>;
+		};
+
+		cpuppr_cpuapp_zbus_shm: memory@2fc0f400 {
+			reg = <0x2fc0f400 DT_SIZE_K(1)>;
+		};
+	};
+
+	ipc {
+		cpuapp_cpuppr_zbus_ipc: ipc-zbus {
+			compatible = "zephyr,ipc-icmsg";
+			status = "okay";
+			dcache-alignment = <32>;
+			mboxes = <&cpuapp_bellboard 15>,
+				 <&cpuppr_vevif 13>;
+		};
+	};
+
+	zephyr,user {
+		zbus-proxy-ipc = <&cpuapp_cpuppr_zbus_ipc>;
+	};
+};

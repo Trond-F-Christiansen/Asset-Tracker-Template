@@ -100,3 +100,15 @@ flash_ext: &gd25le255e {
 &temp_nrfs {
 	status = "okay";
 };
+
+/* PWM module. The zephyr,user node is shared with the PPR image, which gets the equivalent node
+ * from the ppr.overlay in src/modules/pwm/remote when the module is placed on the PPR core
+ * (SB_CONFIG_ATT_PWM_ON_PPR). In that case pwm130 is disabled for this image by the app.overlay in
+ * the same folder.
+ */
+/ {
+	zephyr,user {
+		/* P2.2, the same pin as led0 */
+		pwms = <&pwm130 0 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
+	};
+};

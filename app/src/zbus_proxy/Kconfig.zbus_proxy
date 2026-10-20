@@ -1,0 +1,28 @@
+#
+# Copyright (c) 2026 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+config APP_ZBUS_PROXY
+	bool "Zbus proxy agent towards the PPR core"
+	depends on SOC_SERIES_NRF92
+	select ZBUS_PROXY_AGENT
+	select ZBUS_PROXY_AGENT_IPC
+	help
+	  Instantiate the zbus proxy agent "ppr_proxy" on the dedicated icmsg instance referenced by
+	  zephyr,user:zbus-proxy-ipc, see remote/ipc.dtsi. The same agent is built into the
+	  application core image and the PPR image. It is selected by the modules that are placed on
+	  the PPR core.
+
+if APP_ZBUS_PROXY
+
+# Both cores must use identical values. The proxy frame is sent over a 1 KB icmsg region, and
+# the PPR has only 64 KB of RAM, so keep both small.
+config ZBUS_PROXY_AGENT_MAX_MESSAGE_SIZE
+	default 32
+
+config ZBUS_PROXY_AGENT_MAX_CHANNEL_NAME_SIZE
+	default 24
+
+endif # APP_ZBUS_PROXY

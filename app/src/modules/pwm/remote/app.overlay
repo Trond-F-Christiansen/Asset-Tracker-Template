@@ -1,0 +1,16 @@
+/*
+ * Copyright (c) 2026 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+/* The PPR core owns pwm130 (and therefore the P2.2 PWM output). The pwm-leds node references
+ * it, so disable it as well.
+ */
+&pwm130 {
+	status = "disabled";
+};
+
+&{/pwmleds} {
+	status = "disabled";
+};

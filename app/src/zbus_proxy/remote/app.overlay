@@ -1,0 +1,25 @@
+/*
+ * Copyright (c) 2026 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+/* Application core side of the zbus proxy agent towards the PPR core. Added to the application
+ * image by app/sysbuild.cmake when a module is placed on the PPR core
+ * (SB_CONFIG_ATT_PWM_ON_PPR or SB_CONFIG_ATT_SAADC_ON_PPR). See ipc.dtsi.
+ */
+
+#include "ipc.dtsi"
+
+&cpuapp_cpuppr_zbus_ipc {
+	mbox-names = "rx", "tx";
+	tx-region = <&cpuapp_cpuppr_zbus_shm>;
+	rx-region = <&cpuppr_cpuapp_zbus_shm>;
+};
+
+/* Bell 15 is rung by the PPR core, route it to the same interrupt as the bells of the other
+ * cores. The board value 0xe3006047 is extended with bit 15.
+ */
+&cpuapp_bellboard {
+	nordic,interrupt-mapping = <0xe300e047 0>;
+};

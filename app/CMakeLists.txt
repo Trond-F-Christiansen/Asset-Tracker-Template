@@ -11,6 +11,7 @@ project("Asset Tracker Template")
 
 # Include files that are common for all modules
 zephyr_include_directories(src/common)
+zephyr_include_directories(src/zbus_proxy)
 zephyr_include_directories(memfault/config)
 
 # Add main application source
@@ -35,3 +36,5 @@ add_subdirectory_ifdef(CONFIG_APP_CLOUD src/modules/cloud)
 add_subdirectory_ifdef(CONFIG_APP_FOTA src/modules/fota)
 add_subdirectory_ifdef(CONFIG_APP_STORAGE src/modules/storage)
 add_subdirectory_ifdef(CONFIG_APP_UART_POWER_CONTROL src/modules/uart_power_control)
+add_subdirectory_ifdef(CONFIG_APP_PWM src/modules/pwm)
+add_subdirectory_ifdef(CONFIG_APP_ZBUS_PROXY src/zbus_proxy)
