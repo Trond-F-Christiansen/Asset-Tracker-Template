@@ -38,21 +38,34 @@
 	};
 };
 
+/* External flash (32 MiB). fmfu_storage_partition is reserved for full modem FOTA.
+ *
+ * The flash is not fitted on every board, and the SPI NOR driver waits forever for it during
+ * device init when it does not answer, which hangs the application before main(). Everything
+ * it needs is therefore disabled here. On a board with the flash fitted, enable it from an
+ * overlay (for example -DEXTRA_DTC_OVERLAY_FILE=...):
+ *
+ *	&dma_fast_region { status = "okay"; };
+ *	&gpio5 { status = "okay"; };
+ *	&spi120 { status = "okay"; };
+ *	&flash_ext { status = "okay"; };
+ *
+ * Full modem FOTA and its stream flash erase follow the status of flash_ext, see app/Kconfig.
+ */
 &dma_fast_region {
-	status = "okay";
+	status = "disabled";
 };
 
 &gpio5 {
-	status = "okay";
+	status = "disabled";
 };
 
 &spi120 {
-	status = "okay";
+	status = "disabled";
 };
 
-/* External flash (32 MiB). fmfu_storage_partition is reserved for full modem FOTA. */
 flash_ext: &gd25le255e {
-	status = "okay";
+	status = "disabled";
 
 	partitions {
 		compatible = "fixed-partitions";

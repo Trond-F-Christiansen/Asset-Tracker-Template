@@ -8,6 +8,9 @@
  * nRF9251 counterpart of overlay-upload-modem-traces-to-memfault.overlay. Pair with
  * overlay-upload-modem-traces-to-memfault.conf.
  *
+ * The traces are stored in the external flash, so flash_ext must be enabled, see the board
+ * overlay.
+ *
  * The trace UART and shared memory region mirror the nrf92-modem-trace-uart snippet
  * (nrf/snippets/nrf92-modem-trace-uart).
  */

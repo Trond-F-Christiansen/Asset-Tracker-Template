@@ -25,6 +25,14 @@ rsource "memfault/Kconfig.memfault"
 
 endmenu
 
+# The nRF9251 DK external flash is optional and disabled in the board overlay. Full modem FOTA
+# keeps the modem firmware in it, so only enable it when the flash_ext node is enabled.
+config NRF_CLOUD_FOTA_FULL_MODEM_UPDATE
+	default y if SOC_SERIES_NRF92 && $(dt_nodelabel_enabled,flash_ext)
+
+config STREAM_FLASH_ERASE
+	default y if SOC_SERIES_NRF92 && $(dt_nodelabel_enabled,flash_ext)
+
 menu "Zephyr Kernel"
 source "Kconfig.zephyr"
 endmenu
