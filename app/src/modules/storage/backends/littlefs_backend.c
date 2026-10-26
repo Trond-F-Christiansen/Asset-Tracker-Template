@@ -463,6 +463,65 @@ static int init_header_files(void)
 	return 0;
 }
 
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(gd25le255e), okay)
+#include <zephyr/drivers/spi.h>
+
+/*
+ * TEMPORARY diagnostic, drop before upstreaming.
+ *
+ * Log the state of the external flash with raw SPI reads next to the spi_nor driver: the JEDEC
+ * ID and the three status registers (busy and write-enable bits, block protect bits), and the
+ * first bytes of the two littlefs superblock candidates.
+ */
+static void ext_flash_diag(const char *when)
+{
+	static const struct spi_dt_spec spi =
+		SPI_DT_SPEC_GET(DT_NODELABEL(gd25le255e), SPI_WORD_SET(8) | SPI_TRANSFER_MSB);
+	static const struct {
+		uint8_t cmd;
+		const char *name;
+	} regs[] = {
+		{0x9f, "JEDEC ID"}, {0x05, "SR1"}, {0x35, "SR2"}, {0x15, "SR3"},
+	};
+	const struct flash_area *fa;
+	int err;
+
+	for (size_t i = 0; i < ARRAY_SIZE(regs); i++) {
+		uint8_t tx[4] = {regs[i].cmd, 0, 0, 0};
+		uint8_t rx[4] = {0};
+		const struct spi_buf tx_buf = {.buf = tx, .len = sizeof(tx)};
+		const struct spi_buf rx_buf = {.buf = rx, .len = sizeof(rx)};
+		const struct spi_buf_set tx_set = {.buffers = &tx_buf, .count = 1};
+		const struct spi_buf_set rx_set = {.buffers = &rx_buf, .count = 1};
+
+		err = spi_transceive_dt(&spi, &tx_set, &rx_set);
+		LOG_WRN("ext flash diag (%s): %s err %d: %02x %02x %02x", when, regs[i].name, err,
+			rx[1], rx[2], rx[3]);
+	}
+
+	err = flash_area_open(FIXED_PARTITION_ID(littlefs_storage), &fa);
+	if (err) {
+		LOG_WRN("ext flash diag (%s): flash_area_open err %d", when, err);
+		return;
+	}
+
+	for (int blk = 0; blk < 2; blk++) {
+		uint8_t buf[16] = {0};
+
+		err = flash_area_read(fa, blk * 4096, buf, sizeof(buf));
+		LOG_WRN("ext flash diag (%s): block %d read err %d", when, blk, err);
+		LOG_HEXDUMP_WRN(buf, sizeof(buf), "first 16 bytes");
+	}
+
+	flash_area_close(fa);
+}
+#else
+static inline void ext_flash_diag(const char *when)
+{
+	ARG_UNUSED(when);
+}
+#endif
+
 /*
  * @brief Initialize LittleFS storage backend
  *
@@ -483,9 +542,19 @@ static int lfs_storage_init(void)
 		 "Increase CONFIG_APP_STORAGE_MAX_TYPES.",
 		 num_types);
 
+	/* Does the flash need time after the reset before reads are valid? */
+	ext_flash_diag("t+0 ms");
+	k_msleep(25);
+	ext_flash_diag("t+25 ms");
+	k_msleep(50);
+	ext_flash_diag("t+75 ms");
+	k_msleep(100);
+	ext_flash_diag("t+175 ms");
+
 	ret = littlefs_mount(mountpoint);
 	if (ret < 0) {
 		LOG_ERR("LittleFS mount failed: %d", ret);
+		ext_flash_diag("after failed mount");
 		SEND_FATAL_ERROR();
 
 		return ret;
