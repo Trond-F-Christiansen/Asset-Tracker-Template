@@ -53,19 +53,19 @@
  * Full modem FOTA and its stream flash erase follow the status of flash_ext, see app/Kconfig.
  */
 &dma_fast_region {
-	status = "disabled";
+	status = "okay";
 };
 
 &gpio5 {
-	status = "disabled";
+	status = "okay";
 };
 
 &spi120 {
-	status = "disabled";
+	status = "okay";
 };
 
 flash_ext: &gd25le255e {
-	status = "disabled";
+	status = "okay";
 
 	partitions {
 		compatible = "fixed-partitions";
