@@ -32,11 +32,13 @@ MEMFAULT_METRICS_KEY_DEFINE(modem_vbat_mv, kMemfaultMetricType_Unsigned)
 #endif /* defined(CONFIG_NRF_MODEM_LIB) */
 
 #if defined(CONFIG_APP_POWER_MONITOR)
-/* SiP supply measured by the INA228 power monitor over each heartbeat interval. */
+/* SiP supply measured by the INA228/INA238 power monitor over each heartbeat interval. */
+MEMFAULT_METRICS_KEY_DEFINE(ina_voltage_mv, kMemfaultMetricType_Unsigned)
+#if defined(CONFIG_APP_POWER_MONITOR_ACCUMULATORS)
 MEMFAULT_METRICS_KEY_DEFINE(ina_hb_avg_current_ua, kMemfaultMetricType_Unsigned)
 MEMFAULT_METRICS_KEY_DEFINE(ina_hb_energy_mj, kMemfaultMetricType_Unsigned)
-MEMFAULT_METRICS_KEY_DEFINE(ina_voltage_mv, kMemfaultMetricType_Unsigned)
 /* The same supply since boot, reported with each heartbeat. */
 MEMFAULT_METRICS_KEY_DEFINE(ina_runtime_avg_current_ua, kMemfaultMetricType_Unsigned)
 MEMFAULT_METRICS_KEY_DEFINE(ina_runtime_energy_mj, kMemfaultMetricType_Unsigned)
+#endif /* defined(CONFIG_APP_POWER_MONITOR_ACCUMULATORS) */
 #endif /* defined(CONFIG_APP_POWER_MONITOR) */

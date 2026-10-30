@@ -13,9 +13,11 @@ static void print_window(const struct shell *shell, const char *title,
 			 const struct power_monitor_window *window)
 {
 	shell_print(shell, "%s (%lld s):", title, (window->duration_ms / 1000));
+#if defined(CONFIG_APP_POWER_MONITOR_ACCUMULATORS)
 	shell_print(shell, "  Avg current:   %d uA", window->avg_current_ua);
 	shell_print(shell, "  Charge:        %lld uC", window->charge_uc);
 	shell_print(shell, "  Energy:        %lld uJ", window->energy_uj);
+#endif /* CONFIG_APP_POWER_MONITOR_ACCUMULATORS */
 }
 
 static int cmd_power_monitor_sample(const struct shell *shell, size_t argc, char **argv)
@@ -28,7 +30,7 @@ static int cmd_power_monitor_sample(const struct shell *shell, size_t argc, char
 
 	err = power_monitor_get(&data);
 	if (err == -ENODATA) {
-		shell_print(shell, "INA228 not available");
+		shell_print(shell, "Power monitor not available");
 		return 0;
 	} else if (err) {
 		shell_error(shell, "power_monitor_get, error: %d", err);
@@ -61,21 +63,21 @@ static int cmd_power_monitor_reset(const struct shell *shell, size_t argc, char 
 		return err;
 	}
 
-	shell_print(shell, "INA228 runtime total reset");
+	shell_print(shell, "Power monitor runtime total reset");
 	return 0;
 }
 
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	sub_cmds,
 	SHELL_CMD(sample, NULL,
-		  "Read the INA228 and print the readout",
+		  "Read the power monitor and print the readout",
 		  cmd_power_monitor_sample),
 	SHELL_CMD(reset, NULL,
-		  "Reset the INA228 runtime total",
+		  "Reset the power monitor runtime total",
 		  cmd_power_monitor_reset),
 	SHELL_SUBCMD_SET_END);
 
 SHELL_CMD_REGISTER(att_power_monitor,
 		   &sub_cmds,
-		   "Asset Tracker Template power monitor (INA228) commands",
+		   "Asset Tracker Template power monitor (INA228/INA238) commands",
 		   NULL);

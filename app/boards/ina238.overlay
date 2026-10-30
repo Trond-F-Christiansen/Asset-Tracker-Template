@@ -1,0 +1,18 @@
+/*
+ * Copyright (c) 2026 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+/* Use for boards with an INA238 instead of the INA228 on the SiP power monitor.
+ * Build with -DEXTRA_DTC_OVERLAY_FILE=boards/ina238.overlay
+ */
+
+&sip_power_monitor {
+	/* Zephyr has no ti,ina238 compatible, the INA237 driver is used. The INA238 has no
+	 * energy and charge accumulators.
+	 */
+	compatible = "ti,ina237";
+	/* 16-bit current register: 546 mA / 2^15 ~= 17 uA, rounded up to 20 uA (max 655 mA) */
+	current-lsb-microamps = <20>;
+};

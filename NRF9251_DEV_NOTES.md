@@ -174,3 +174,18 @@ west ncs-mergehex --no-rebuild -d build
 > **The key is secret.** Never commit it to a `.conf` file or a script. A key that has been
 > pushed is compromised: regenerate the credentials, delete the device in nRF Cloud and onboard
 > it again.
+
+## INA238 instead of INA228 on the power monitor
+
+Some boards have an INA238 on `sip_power_monitor` instead of the INA228. Add the overlay
+`app/boards/ina238.overlay` to the build:
+
+```shell
+west build -p -b nrf9251dk/nrf9251/cpuapp --sysbuild -d build app -- \
+    -DEXTRA_DTC_OVERLAY_FILE=boards/ina238.overlay
+```
+
+Zephyr has no `ti,ina238` compatible; the overlay selects the INA237 driver, which is
+register compatible, and sets a 20 uA current LSB (16-bit current register). The INA238 has no
+energy and charge accumulators, so `CONFIG_APP_POWER_MONITOR_ACCUMULATORS` is off: only voltage,
+current and power are reported (shell, logs and the `ina_voltage_mv` Memfault metric).

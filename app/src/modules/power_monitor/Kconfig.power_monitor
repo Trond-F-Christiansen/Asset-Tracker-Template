@@ -5,22 +5,32 @@
 #
 
 menuconfig APP_POWER_MONITOR
-	bool "Power monitor module (INA228)"
-	depends on DT_HAS_TI_INA228_ENABLED
+	bool "Power monitor module (INA228/INA238)"
+	depends on DT_HAS_TI_INA228_ENABLED || DT_HAS_TI_INA237_ENABLED
 	select SENSOR
 	default y
 	help
-	  Reads a TI INA228 power monitor (devicetree node label "sip_power_monitor")
-	  on demand using the Zephyr sensor driver. Energy and charge are integrated by the
-	  INA228 hardware accumulators between readouts. Reports voltage, current, power,
-	  energy and average current through logs, shell commands and Memfault metrics.
+	  Reads a TI INA228 or INA238 power monitor (devicetree node label
+	  "sip_power_monitor") on demand using the Zephyr sensor driver. The INA238 has no
+	  Zephyr compatible of its own and is described as "ti,ina237", see
+	  boards/ina238.overlay. Reports voltage, current and power. With an INA228, energy and
+	  charge are also integrated by the hardware accumulators between readouts, and energy
+	  and average current are reported through logs, shell commands and Memfault metrics.
 
 if APP_POWER_MONITOR
+
+config APP_POWER_MONITOR_ACCUMULATORS
+	bool
+	default y if DT_HAS_TI_INA228_ENABLED
+	help
+	  The power monitor has energy and charge accumulators (INA228). Not available on the
+	  INA238.
 
 config APP_POWER_MONITOR_MAX_READ_INTERVAL_HOURS
 	int "Maximum time between readouts"
 	default 10
 	range 0 240
+	depends on APP_POWER_MONITOR_ACCUMULATORS
 	help
 	  The INA228 is read when data is needed (shell command, Memfault heartbeat). If
 	  nothing has read it for this many hours, a safety readout is done on the system
@@ -32,8 +42,8 @@ config APP_POWER_MONITOR_LOG_SAMPLES
 	bool "Log every readout"
 	default n
 	help
-	  Log voltage, current, power and the average current since the previous readout
-	  at every readout.
+	  Log voltage, current and power at every readout, and the average current since the
+	  previous readout if the power monitor has accumulators.
 
 config APP_POWER_MONITOR_SHELL
 	bool "Power monitor shell commands"
