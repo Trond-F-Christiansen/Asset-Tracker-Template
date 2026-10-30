@@ -10,23 +10,7 @@
  *
  * The traces are stored in the external flash, so flash_ext must be enabled, see the board
  * overlay.
- *
- * The trace UART and shared memory region mirror the nrf92-modem-trace-uart snippet
- * (nrf/snippets/nrf92-modem-trace-uart).
  */
-
-/* Used by the modem_trace dump_uart shell command. */
-&uart132 {
-	status = "okay";
-	current-speed = <1000000>;
-	memory-regions = <&cpuapp_dma_region>;
-};
-
-/ {
-	chosen {
-		nordic,modem-trace-uart = &uart132;
-	};
-};
 
 /delete-node/ &cpuapp_cpucell_ipc_shm_ctrl;
 /delete-node/ &cpuapp_cpucell_ipc_shm_heap;
