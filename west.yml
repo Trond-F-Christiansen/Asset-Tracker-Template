@@ -9,10 +9,19 @@ manifest:
   remotes:
     - name: ncs
       url-base: https://github.com/nrfconnect
+    - name: trondfc
+      url-base: https://github.com/Trond-F-Christiansen
 
   projects:
+    # Overrides the Memfault SDK imported from nrf: multi-component OTA PoC
+    # (branch poc/keyless-component).
+    - name: memfault-firmware-sdk
+      remote: trondfc
+      repo-path: memfault-firmware-sdk
+      revision: 9238f1591f36e9a55a404bd91b4cc23347d25793
+      path: modules/lib/memfault-firmware-sdk
     - name: nrf
-      remote: ncs
+      remote: trondfc
       repo-path: sdk-nrf
-      revision: v3.5.0-preview3
+      revision: 90062c48e64969a8cffcc7394596aba4a586772d
       import: true
