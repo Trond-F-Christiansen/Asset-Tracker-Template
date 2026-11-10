@@ -60,6 +60,41 @@ export UUID=<your_imei>
 export NRFCLOUD_API_KEY=<your_nrfcloud_api_key>
 ```
 
+FOTA tests: the application, the bootloader and the modem firmware are updated with Memfault
+OTA releases, see `utils/memfault_ota.py`. The tests use the [Memfault CLI](https://docs.memfault.com/docs/ci/install-memfault-cli)
+(`memfault-cli`, in `requirements.txt`), and are skipped without these envs:
+```shell
+export MEMFAULT_ORGANIZATION_TOKEN=<your_memfault_organization_token>
+export MEMFAULT_ORGANIZATION_SLUG=<your_memfault_organization_slug>
+export MEMFAULT_PROJECT_SLUG=<your_memfault_project_slug>
+# The cohort the DUT is in. Releases are deployed to it, so do not use a cohort of other devices.
+export MEMFAULT_TEST_COHORT=<your_cohort_of_the_dut>
+# The hardware version the DUT reports to Memfault (the hardware_version in the Memfault debug log)
+export MEMFAULT_HARDWARE_VERSION=<hardware_version>
+```
+
+All the FOTA tests share one Memfault release, which has the version of the fota-target build
+(`x.x.x-fota-test-<date>`, it sorts after the `x.x.x-dev` baseline). A test uploads its images to
+the release and deploys it to the cohort, and removes the images and deactivates the release
+when it is done. The CLI cannot delete an image, so the tests also call the Memfault REST API
+(`DELETE .../artifacts/<id>`) with the organization token, which needs the same role as
+`deploy-release` (Manager). If a run is killed, the next run removes the images that are left.
+The version is read from `artifacts/fota-target-version-<device>.txt` of the fota-target build
+(or set `FOTA_TARGET_VERSION`). Use memfault-cli 1.11.0 or later (`--component-version`).
+
+Files of the FOTA tests, which are skipped when they are not provided:
+```shell
+# dfu_mcuboot.zip of a build with bootloader (fw_info) version 3, for the bootloader test
+export MCUBOOT_DFU_ZIP=<path_to_dfu_mcuboot.zip>
+# The modem FOTA files, for the modem tests (default: artifacts/mfw_fota)
+export MFW_FOTA_DIR=<directory_with>
+#   mfw_nrf91x1_2.0.4.cbor
+#   mfw_nrf91x1_update_from_2.0.4_to_2.0.4-FOTA-TEST.bin
+#   mfw_nrf91x1_update_from_2.0.4-FOTA-TEST_to_2.0.4.bin
+```
+
+Run the tests of the helpers (they do not need hardware) with `python3 -m pytest utils`.
+
 On macOS also set `UART_ID`: port names (`/dev/tty.usbmodem*`) don't contain the SEGGER
 serial that `UART_ID` defaults to, so set it to a substring shared by your DUT's two ports
 (seen in `nrfutil device list`):
